@@ -18,7 +18,7 @@ import threading
 import time
 
 # App Version
-APP_VERSION = "1.3.19"
+APP_VERSION = "1.3.20"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
