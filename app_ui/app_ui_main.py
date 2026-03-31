@@ -228,6 +228,8 @@ class AppUI:
                                 COLORS["text_main"], self.open_settings_dialog),
             self.make_menu_item(ft.Icons.HISTORY, "History",
                                 COLORS["text_main"], self.toggle_history_view),
+            self.make_menu_item(ft.Icons.SYSTEM_UPDATE, "Check Update",
+                                COLORS["accent"], self.manual_check_updates),
         ], spacing=5)
 
         col_left = ft.Container(
@@ -327,9 +329,6 @@ class AppUI:
             ft.Text("Post History", size=20, weight="bold",
                     color=COLORS["text_main"]),
             ft.Container(expand=True),  # Spacer
-            self.version_text,
-            self.update_button,
-            self.update_status_text,
             btn_back_home
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center")
 
@@ -517,7 +516,6 @@ class AppUI:
             color=COLORS["text_muted"],
             weight="w500"
         )
-
 
         main_layout = ft.Row([
             col_left,
