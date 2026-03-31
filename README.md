@@ -1,4 +1,4 @@
-# Vibecode - Auto Posting Bot 🤖
+# Vibecode - Auto Posting Tool
 
 **Tự động đăng bài lên Facebook với Playwright + Stealth Mode**
 
