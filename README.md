@@ -167,4 +167,4 @@ MIT License - See LICENSE file
 
 ---
 
-**Made with ❤️ for Facebook automation**
+**Made by Tristan**
