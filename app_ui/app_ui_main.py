@@ -1795,7 +1795,7 @@ class AppUI:
             ]
         )
 
-        self.page.dialog = dlg
+        self.page.overlay.append(dlg)
         dlg.open = True
         self.page.update()
 
