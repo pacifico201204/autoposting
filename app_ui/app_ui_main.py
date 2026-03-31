@@ -220,7 +220,7 @@ class AppUI:
             self.render_album_slots()
             self.page.update()
 
-    def make_card(self, title, content, expand=False, padding=15):
+    def make_card(self, title, content, expand=False, padding=15, center_title=False):
         """Hàm dựng các hộp nội dung (Cards) nhất quán"""
         # Internal title padding if container padding is set to 0
         title_padding = ft.padding.only(left=20, top=15, right=20) if padding == 0 else 0
@@ -230,7 +230,8 @@ class AppUI:
                 ft.Container(
                     content=ft.Text(title, weight="bold", size=16,
                             color=COLORS["text_main"]),
-                    padding=title_padding
+                    padding=title_padding,
+                    alignment=ft.Alignment(0, 0) if center_title else ft.Alignment(-1, 0)
                 ),
                 ft.Divider(color=COLORS["border"], height=1),
                 content
@@ -564,6 +565,14 @@ class AppUI:
             ]
         )
 
+        # Pre-allocate Update Dialog (Problem Fix #10: Consistent initialization at startup)
+        self.update_dialog = ft.AlertDialog(
+            title=ft.Text("Mới nhất", color=COLORS["text_main"]),
+            bgcolor=COLORS["bg_card"],
+            content=ft.Text("Đang tải dữ liệu...", size=13, color=COLORS["text_muted"]),
+            actions=[]
+        )
+
         # 2. Log Console with Toggle (User Messages vs Technical Logs)
         self.log_list_user = ft.ListView(
             expand=True, auto_scroll=False, spacing=5)  # User-friendly messages
@@ -629,7 +638,8 @@ class AppUI:
                 log_container
             ], expand=True, spacing=0),
             padding=0,
-            expand=True
+            expand=True,
+            center_title=True
         )
 
         col_right = ft.Container(
@@ -660,6 +670,7 @@ class AppUI:
         )
         self.page.overlay.append(self.add_dialog)
         self.page.overlay.append(self.settings_dialog)
+        self.page.overlay.append(self.update_dialog)
 
         # Fix #9: Load history from persistent file on startup
         self.history_manager.load_from_file()
@@ -1686,12 +1697,14 @@ class AppUI:
             update_info = self.update_manager.check_for_updates()
 
             if update_info.get("has_update"):
-                self.page.snack_bar = ft.SnackBar(
+                snack = ft.SnackBar(
                     ft.Text(f"✨ Update v{update_info['version']} available!"),
                     action="Update",
                     on_action=lambda e: self._show_update_dialog(update_info)
                 )
-                self.page.snack_bar.open = True
+                self.page.snack_bar = snack
+                snack.open = True
+                self.page.update()
                 self.update_status_text.value = f"Update available: v{update_info['version']}"
                 self.update_status_text.color = COLORS["success"]
             else:
@@ -1721,6 +1734,11 @@ class AppUI:
         self.update_button.disabled = True
         self.update_status_text.value = "Checking..."
         self.update_status_text.color = COLORS["accent"]
+        
+        # Immediate feedback SnackBar (Request: "hiện lên luôn")
+        snack = ft.SnackBar(ft.Text("🔍 Đang kiểm tra phiên bản mới..."))
+        self.page.snack_bar = snack
+        snack.open = True
         self.page.update()
 
         threading.Thread(
@@ -1764,48 +1782,41 @@ class AppUI:
             self.page.update()
 
     def _show_update_dialog(self, update_info):
-        """Show update confirmation dialog"""
+        """Update and show the PRE-ALLOCATED confirmation dialog"""
         def perform_update(e):
-            dlg.open = False
+            self.update_dialog.open = False
             self.page.update()
 
-            # Perform update in background
+            # Perform update in background (Fixed pattern: threading call outside UI block if needed)
+            import threading
             threading.Thread(
                 target=self._do_update,
                 args=(update_info,),
                 daemon=True
             ).start()
 
-        dlg = ft.AlertDialog(
-            title=ft.Text(
-                f"Update Available: v{update_info['version']}", color=COLORS["text_main"]),
-            bgcolor=COLORS["bg_card"],
-            content=ft.Column([
-                ft.Text(f"Current version: v{VERSION}",
-                        size=13, color=COLORS["text_muted"]),
-                ft.Text(
-                    f"New version: v{update_info['version']}", size=13, color=COLORS["success"]),
-                ft.Divider(color=COLORS["border"]),
-                ft.Text("Release notes:", size=12, weight="w500",
-                        color=COLORS["text_main"]),
-                ft.Text(
-                    update_info.get("release_notes",
-                                    "No notes available")[:300],
-                    size=11,
-                    color=COLORS["text_muted"],
-                    max_lines=5
-                )
-            ], tight=True, spacing=10),
-            actions=[
-                ft.TextButton("Later", on_click=lambda e: (
-                    setattr(dlg, "open", False), self.page.update())),
-                ft.ElevatedButton(
-                    "Update Now", on_click=perform_update, bgcolor=COLORS["accent"])
-            ]
-        )
+        # Update the pre-allocated dialog content
+        self.update_dialog.title = ft.Text(
+            f"Update Available: v{update_info['version']}", color=COLORS["text_main"])
+        
+        self.update_dialog.content = ft.Column([
+            ft.Text(f"Current version: v{VERSION}",
+                    size=13, color=COLORS["text_muted"]),
+            ft.Text(f"New version: v{update_info['version']}",
+                    size=13, color=COLORS["success"]),
+            ft.Divider(color=COLORS["border"]),
+            ft.Text("Release notes:", size=12, weight="w500", color=COLORS["text_main"]),
+            ft.Text(update_info.get("release_notes", "No notes available")[:300],
+                    size=11, color=COLORS["text_muted"], max_lines=5)
+        ], tight=True, spacing=10)
+        
+        self.update_dialog.actions = [
+            ft.TextButton("Later", on_click=lambda e: (
+                setattr(self.update_dialog, "open", False), self.page.update())),
+            ft.ElevatedButton("Update Now", on_click=perform_update, bgcolor=COLORS["accent"])
+        ]
 
-        self.page.overlay.append(dlg)
-        dlg.open = True
+        self.update_dialog.open = True
         self.page.update()
 
     def _do_update(self, update_info):
