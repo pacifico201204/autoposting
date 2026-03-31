@@ -1,4 +1,4 @@
-# Vibecode - Auto Posting Tool
+# Auto Posting Tool
 
 **Tự động đăng bài lên Facebook với Playwright + Stealth Mode**
 
@@ -16,7 +16,7 @@ Auto-posting bot for Facebook groups with stealth mode to avoid account restrict
 
 ### Run EXE (easiest)
 ```bash
-dist/Vibecode/Vibecode.exe
+dist/AutoPostingTool/AutoPostingTool.exe
 ```
 
 ### Run from Python
@@ -33,17 +33,14 @@ python main.py
 ## 📁 Project Structure
 
 ```
-Vibecode/
 ├── app_ui/                 # UI code (Flet)
 │   ├── app_ui_main.py     # Main application
 │   ├── ui_handlers.py     # Event handlers
 │   └── ...
 ├── docs/                   # Documentation (3 files)
-├── tests/                  # Unit tests (46 tests)
 ├── config.yaml            # Configuration (user-editable)
 ├── main.py                # Entry point
 ├── requirements.txt       # Dependencies
-├── Vibecode.spec          # PyInstaller config
 └── icon.ico               # App icon
 ```
 

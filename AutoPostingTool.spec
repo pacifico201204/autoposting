@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Updated spec for Vibecode - March 31, 2026
+# Auto Posting Tool - PyInstaller Config
 # One-Dir Mode Only (simpler to update and distribute)
 
 import sys
@@ -46,7 +46,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Vibecode',
+    name='AutoPostingTool',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -64,5 +64,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='Vibecode',
+    name='AutoPostingTool',
 )
