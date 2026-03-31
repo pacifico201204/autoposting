@@ -246,7 +246,7 @@ class AppUI:
             shadow=ft.BoxShadow(
                 spread_radius=0,
                 blur_radius=20,
-                color=ft.colors.with_opacity(0.3, "black"),
+                color="#4D000000", # Black with ~30% opacity
                 offset=ft.Offset(0, 4),
             )
         )
@@ -698,7 +698,8 @@ class AppUI:
         )
 
     def on_menu_hover(self, e):
-        e.control.bgcolor = ft.colors.with_opacity(0.1, COLORS["accent"]) if e.data == "true" else "transparent"
+        # 10% opacity blue accent
+        e.control.bgcolor = "#1A1877F2" if e.data == "true" else "transparent"
         e.control.update()
 
     def toggle_history_view(self, e):
