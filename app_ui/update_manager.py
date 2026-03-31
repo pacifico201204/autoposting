@@ -14,20 +14,16 @@ import requests
 from datetime import datetime
 from pathlib import Path
 from logger_config import log_debug, log_info, log_error
-import threading
-import time
 
 # App Version
-APP_VERSION = "1.3.20"
+APP_VERSION = "1.3.22"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
 
 class UpdateManager:
-    def __init__(self, test_mode=False):
+    def __init__(self):
         self.current_version = APP_VERSION
-        self.test_mode = test_mode or os.path.exists(
-            "TEST_UPDATE_MODE")  # Enable via file
         self.backup_folder = Path(BACKUP_FOLDER)
         try:
             self.backup_folder.mkdir(exist_ok=True)
@@ -39,20 +35,9 @@ class UpdateManager:
 
     def check_for_updates(self) -> dict:
         """
-        Check GitHub for latest release (or use test mode)
+        Check GitHub for latest release
         Returns: {"has_update": bool, "version": str, "download_url": str}
         """
-        # Test mode - simulate version 1.3.13
-        if self.test_mode:
-            log_info("🧪 TEST MODE: Simulating update to 1.3.13")
-            return {
-                "has_update": True,
-                "version": "1.3.13",
-                "download_url": None,  # Will use local file
-                "release_notes": "Test Update 1.3.13\n- Fixed backup/restore flow\n- Improved error handling",
-                "error": None
-            }
-
         try:
             response = requests.get(
                 f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
@@ -102,13 +87,9 @@ class UpdateManager:
             if backup_path.exists():
                 shutil.rmtree(backup_path)
 
-            # Copy entire app folder, ignoring the backup folder, logs, and other temp files.
-            ignore_list = shutil.ignore_patterns(
-                BACKUP_FOLDER, "logs", ".git", "__pycache__", "*.zip", "test_user_data", "fb_user_data_edge")
-
+            # Copy entire app folder
             if self.app_folder.exists():
-                shutil.copytree(self.app_folder, backup_path,
-                                ignore=ignore_list)
+                shutil.copytree(self.app_folder, backup_path)
 
             # Also backup config
             config_backup = self.backup_folder / \
@@ -123,38 +104,19 @@ class UpdateManager:
 
     def download_update(self, download_url: str, output_file: str = "update.zip", progress_callback=None) -> tuple[bool, str]:
         """
-        Download new version from GitHub (optimized chunk size)
+        Download new version from GitHub
         Returns: (success: bool, file_path: str)
         """
-        # Test mode - create mock update zip
-        if self.test_mode and download_url is None:
-            try:
-                log_info("🧪 TEST MODE: Creating mock update package...")
-
-                # Create a dummy zip file for testing
-                import tempfile
-                with zipfile.ZipFile(output_file, 'w') as zf:
-                    # Create mock AutoPostingTool folder structure
-                    zf.writestr('AutoPostingTool/VERSION', '1.3.13')
-                    zf.writestr('AutoPostingTool/update_info.txt',
-                                'Version 1.3.13 - Test Update\n- Fixed backup/restore flow\n- Improved error handling')
-
-                log_info(f"✅ Mock update package created: {output_file}")
-                return True, output_file
-            except Exception as e:
-                return False, f"Mock update creation failed: {str(e)}"
-
         try:
             response = requests.get(download_url, stream=True, timeout=300)
             response.raise_for_status()
 
-            # Download with progress (optimized chunk size: 256KB instead of 8KB)
+            # Download with progress
             total = int(response.headers.get("content-length", 0))
             downloaded = 0
-            chunk_size = 262144  # 256KB for faster download
 
             with open(output_file, "wb") as f:
-                for chunk in response.iter_content(chunk_size=chunk_size):
+                for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
@@ -167,7 +129,8 @@ class UpdateManager:
             return False, f"Download failed: {str(e)}"
 
     def extract_update(self, zip_file: str) -> tuple[bool, str]:
-        """ (optimized with forced file overwrite)
+        """
+        Extract downloaded zip to app folder
         Returns: (success: bool, message: str)
         """
         try:
@@ -179,30 +142,17 @@ class UpdateManager:
 
                 zip_ref.extractall(temp_extract)
 
-            # Find the extracted AutoPostingTool folder or use root if files are at top level
+            # Find the extracted AutoPostingTool folder
             extracted_app = None
-
-            # First, try to find AutoPostingTool folder
             for item in temp_extract.iterdir():
                 if item.is_dir() and "AutoPostingTool" in item.name:
                     extracted_app = item
                     break
 
-            # If not found, check if main.py exists at root (files at top level)
             if not extracted_app:
-                main_py_at_root = False
-                for item in temp_extract.iterdir():
-                    if item.name == "main.py" and item.is_file():
-                        main_py_at_root = True
-                        break
+                return False, "Extracted folder not found"
 
-                if main_py_at_root:
-                    # Files are at root level, use temp folder directly
-                    extracted_app = temp_extract
-                else:
-                    return False, "Extracted folder not found - no AutoPostingTool folder or main.py at root"
-
-            # Robust overwrite for Windows (handles locked files more aggressively)
+            # Robust overwrite for Windows (handles locked files by renaming them)
             if self.app_folder.exists():
                 # 1. Backup config
                 config_bak = None
@@ -211,18 +161,7 @@ class UpdateManager:
                     config_bak = Path("config_temp.yaml")
                     shutil.copy(config_path, config_bak)
 
-                # 2. Close files by forcing file handles release (Windows specific)
-                # Give some time for files to be released
-                time.sleep(0.5)
-
-                # 3. Delete old .old files first
-                for old_file in self.app_folder.rglob('*.old'):
-                    try:
-                        old_file.unlink()
-                    except:
-                        pass
-
-                # 4. Iterate through new app and copy into place with aggressive overwrite
+                # 2. Iterate through new app and copy into place
                 for src_item in extracted_app.rglob('*'):
                     rel_path = src_item.relative_to(extracted_app)
                     dest_target = self.app_folder / rel_path
@@ -230,117 +169,96 @@ class UpdateManager:
                     if src_item.is_dir():
                         dest_target.mkdir(parents=True, exist_ok=True)
                     else:
-                        # Force remove existing file
+                        # If file exists and locked, rename first
                         if dest_target.exists():
-                            max_retries = 3
-                            for attempt in range(max_retries):
+                            try:
+                                dest_target.unlink()
+                            except Exception:
+                                # Locked? Rename to .old
                                 try:
-                                    dest_target.unlink()
-                                    break
+                                    temp_old = dest_target.with_suffix(dest_target.suffix + ".old")
+                                    if temp_old.exists():
+                                        temp_old.unlink(missing_ok=True)
+                                    os.rename(str(dest_target), str(temp_old))
                                 except Exception:
-                                    if attempt < max_retries - 1:
-                                        # Last resort: rename to .old if still locked
-                                        try:
-                                            temp_old = dest_target.with_suffix(
-                                                dest_target.suffix + ".old")
-                                            if temp_old.exists():
-                                                try:
-                                                    temp_old.unlink()
-                                                except:
-                                                    pass
-                                            os.rename(
-                                                str(dest_target), str(temp_old))
-                                            break
-                                        except Exception:
-                                            # Wait a bit before retry
-                                            time.sleep(0.1)
-                                    else:
-                                        pass  # Skip this file, next copy might work
+                                    pass # Give up on this specific file
 
-                        try:
-                            shutil.copy2(src_item, dest_target)
-                        except Exception as e:
-                            log_error(f"Could not copy {src_item}: {e}")
-                            # Continue with other files
+                        shutil.copy2(src_item, dest_target)
 
-                # 5. Restore config
+                # 3. Restore config
                 if config_bak and config_bak.exists():
                     shutil.copy(config_bak, config_path)
                     config_bak.unlink()
 
             # Cleanup
             if temp_extract.exists():
-                shutil.rmtree(temp_extract, ignore_errors=True)
+                shutil.rmtree(temp_extract)
             if os.path.exists(zip_file):
-                try:
-                    os.unlink(zip_file)
-                except:
-                    passile):
-                        os.unlink(zip_file)
+                os.unlink(zip_file)
 
-                        return True, "Update extracted successfully"
+            return True, "Update extracted successfully"
 
-                        except Exception as e:
-                        return False, f"Extraction failed: {str(e)}"
+        except Exception as e:
+            return False, f"Extraction failed: {str(e)}"
 
-                        def restore_from_backup(self, backup_path: str) -> tuple[bool, str]:
-                        """
+    def restore_from_backup(self, backup_path: str) -> tuple[bool, str]:
+        """
         Restore app from backup if update fails
         Returns: (success: bool, message: str)
         """
-                        try:
-                        backup_dir= Path(backup_path)
+        try:
+            backup_dir = Path(backup_path)
 
-                        if not backup_dir.exists():
-                        return False, f"Backup not found: {backup_path}"
+            if not backup_dir.exists():
+                return False, f"Backup not found: {backup_path}"
 
-                        # Remove current app
-                        if self.app_folder.exists():
-                        shutil.rmtree(self.app_folder)
+            # Remove current app
+            if self.app_folder.exists():
+                shutil.rmtree(self.app_folder)
 
-                        # Restore from backup
-                        shutil.copytree(backup_dir, self.app_folder)
+            # Restore from backup
+            shutil.copytree(backup_dir, self.app_folder)
 
-                        return True, "App restored from backup"
+            return True, "App restored from backup"
 
-                        except Exception as e:
-                        return False, f"Restore failed: {str(e)}"
+        except Exception as e:
+            return False, f"Restore failed: {str(e)}"
 
-                        def cleanup_old_backups(self, keep_count: int = 3):
-                        """Keep only recent backups, cleanup old ones"""
-                        try:
-                        backups= sorted(
+    def cleanup_old_backups(self, keep_count: int = 3):
+        """Keep only recent backups, cleanup old ones"""
+        try:
+            backups = sorted(
                 [d for d in self.backup_folder.iterdir() if d.is_dir()],
-                def key(x): return x.stat().st_mtime,
-                reverse = True
+                key=lambda x: x.stat().st_mtime,
+                reverse=True
             )
 
-                # Delete old backups after keeping recent ones
-                for old_backup in backups[keep_count:]:
+            # Delete old backups after keeping recent ones
+            for old_backup in backups[keep_count:]:
                 shutil.rmtree(old_backup)
 
-                except Exception as e:
-                print(f"Cleanup failed: {e}")
+        except Exception as e:
+            print(f"Cleanup failed: {e}")
 
-                def _compare_versions(self, v1: str, v2: str) -> int:
-                """
+    def _compare_versions(self, v1: str, v2: str) -> int:
+        """
         Compare versions: v1 > v2 returns 1, equal returns 0, v1 < v2 returns -1
         """
-                try:
-                v1_parts= [int(x) for x in v1.split(".")]
-                v2_parts= [int(x) for x in v2.split(".")]
+        try:
+            v1_parts = [int(x) for x in v1.split(".")]
+            v2_parts = [int(x) for x in v2.split(".")]
 
-                # Pad shorter version with zeros
-                max_len= max(len(v1_parts), len(v2_parts))
-                v1_parts.extend([0] * (max_len - len(v1_parts)))
-                v2_parts.extend([0] * (max_len - len(v2_parts)))
+            # Pad shorter version with zeros
+            max_len = max(len(v1_parts), len(v2_parts))
+            v1_parts.extend([0] * (max_len - len(v1_parts)))
+            v2_parts.extend([0] * (max_len - len(v2_parts)))
 
-                if v1_parts > v2_parts:
+            if v1_parts > v2_parts:
                 return 1
-                elif v1_parts < v2_parts:
+            elif v1_parts < v2_parts:
                 return -1
-                else:
+            else:
                 return 0
-                except Exception as e:
-                log_debug(f"Version comparison error: {str(e)}")
-                return 0
+        except Exception as e:
+            log_debug(f"Version comparison error: {str(e)}")
+            return 0

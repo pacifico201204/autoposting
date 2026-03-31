@@ -1,5 +1,3 @@
-from utils import get_resource_path
-from thread_safety import get_auto_runner, get_modification_guard
 from exceptions import TooManyPostsException, ContextDestroyedException
 from detection_limiter import DetectionLimiter
 from validators import Validators, ValidationError
@@ -32,11 +30,14 @@ from playwright_stealth import Stealth
 import nest_asyncio
 nest_asyncio.apply()
 
+from thread_safety import get_auto_runner, get_modification_guard
 auto_runner = get_auto_runner()
 mod_guard = get_modification_guard()
 
 # Get base path for bundled resources (PyInstaller or development)
 
+
+from utils import get_resource_path
 
 # Load configuration from config.yaml
 
@@ -124,7 +125,6 @@ class AppUI:
         self.version_text = None
         self.update_button = None
         self.updating = False
-        self.showing_update_dialog = False  # Prevent multiple dialogs
 
         self.posting_progress_container = None
         self.update_progress_container = None
@@ -223,24 +223,22 @@ class AppUI:
     def make_card(self, title, content, expand=False, padding=15, center_title=False):
         """Hàm dựng các hộp nội dung (Cards) nhất quán"""
         # Internal title padding if container padding is set to 0
-        title_padding = ft.padding.only(
-            left=20, top=15, right=20) if padding == 0 else 0
-
+        title_padding = ft.padding.only(left=20, top=15, right=20) if padding == 0 else 0
+        
         container = ft.Container(
             content=ft.Column([
                 ft.Container(
                     content=ft.Text(title, weight="bold", size=16,
-                                    color=COLORS["text_main"]),
+                            color=COLORS["text_main"]),
                     padding=title_padding,
-                    alignment=ft.Alignment(
-                        0, 0) if center_title else ft.Alignment(-1, 0)
+                    alignment=ft.Alignment(0, 0) if center_title else ft.Alignment(-1, 0)
                 ),
                 ft.Divider(color=COLORS["border"], height=1),
                 content
             ], spacing=0 if padding == 0 else 15, expand=expand),
             padding=padding,
             bgcolor=COLORS["bg_card"],
-            border_radius=15,  # Softer corners
+            border_radius=15, # Softer corners
             border=ft.Border.all(
                 1, COLORS["border"]) if COLORS["border"] else None,
             expand=expand,
@@ -248,7 +246,7 @@ class AppUI:
             shadow=ft.BoxShadow(
                 spread_radius=0,
                 blur_radius=20,
-                color="#4D000000",  # Black with ~30% opacity
+                color="#4D000000", # Black with ~30% opacity
                 offset=ft.Offset(0, 4),
             )
         )
@@ -261,8 +259,7 @@ class AppUI:
         header_container = ft.Container(
             content=ft.Row([
                 ft.Row([
-                    ft.Icon(ft.Icons.FACEBOOK,
-                            color=COLORS["accent"], size=40),
+                    ft.Icon(ft.Icons.FACEBOOK, color=COLORS["accent"], size=40),
                     ft.Text("Auto Posting by Tristan", size=24,
                             weight="w800", color=COLORS["text_main"])
                 ], spacing=10),
@@ -286,10 +283,10 @@ class AppUI:
                     ], spacing=10, vertical_alignment="center", alignment="center"),
                     bgcolor="#FF9800",
                     padding=8,
-                    width=float("inf")  # Full width
+                    width=float("inf") # Full width
                 )
             )
-
+        
         header = ft.Column(header_items, spacing=0)
 
         # ================= CỘT TRÁI (MENU & CÔNG CỤ) - Chiếm khoảng 20% =================
@@ -576,8 +573,7 @@ class AppUI:
         self.update_dialog = ft.AlertDialog(
             title=ft.Text("Mới nhất", color=COLORS["text_main"]),
             bgcolor=COLORS["bg_card"],
-            content=ft.Text("Đang tải dữ liệu...", size=13,
-                            color=COLORS["text_muted"]),
+            content=ft.Text("Đang tải dữ liệu...", size=13, color=COLORS["text_muted"]),
             actions=[]
         )
 
@@ -1484,10 +1480,9 @@ class AppUI:
             progress_value = current_index / total if total > 0 else 0
             self.posting_progress_bar.value = progress_value
             # Trim group name if too long
-            short_group = current_group_name[:15] + "..." if len(
-                current_group_name) > 15 else current_group_name
+            short_group = current_group_name[:15] + "..." if len(current_group_name) > 15 else current_group_name
             self.posting_progress_text.value = f"Đang đăng: {current_index}/{total} ({short_group})"
-
+            
         self.page.update()
 
     def _hide_posting_progress(self):
@@ -1522,17 +1517,14 @@ class AppUI:
             # Build info text
             info_parts = []
             info_parts.append(f"⏰ Thời gian crash: {time_str}")
-            info_parts.append(
-                f"📊 Đã đăng: {summary['posted']}/{summary['total']} nhóm")
-            info_parts.append(
-                f"📋 Còn lại: {summary['remaining']} nhóm chưa đăng")
+            info_parts.append(f"📊 Đã đăng: {summary['posted']}/{summary['total']} nhóm")
+            info_parts.append(f"📋 Còn lại: {summary['remaining']} nhóm chưa đăng")
             if summary["has_content"]:
                 info_parts.append(f"📝 Có nội dung text")
             if summary["has_images"]:
                 info_parts.append(f"🖼️ Có {summary['image_count']} ảnh")
             if summary["failed_groups"]:
-                info_parts.append(
-                    f"❌ Nhóm lỗi: {', '.join(summary['failed_groups'][:3])}")
+                info_parts.append(f"❌ Nhóm lỗi: {', '.join(summary['failed_groups'][:3])}")
 
             info_text = "\n".join(info_parts)
 
@@ -1750,7 +1742,7 @@ class AppUI:
         self.update_button.disabled = True
         self.update_status_text.value = "Checking..."
         self.update_status_text.color = COLORS["accent"]
-
+        
         # Immediate feedback SnackBar (Request: "hiện lên luôn")
         snack = ft.SnackBar(ft.Text("🔍 Đang kiểm tra phiên bản mới..."))
         self.page.snack_bar = snack
@@ -1778,9 +1770,8 @@ class AppUI:
                 self.update_status_text.value = f"v{update_info['version']} available"
                 self.update_status_text.color = COLORS["success"]
 
-                # Show update dialog (prevent multiple dialogs)
-                if not self.showing_update_dialog:
-                    self._show_update_dialog(update_info)
+                # Show update dialog
+                self._show_update_dialog(update_info)
             else:
                 self.log_msg(
                     f"✅ You're up to date (v{VERSION})", color=COLORS["success"])
@@ -1799,15 +1790,9 @@ class AppUI:
             self.page.update()
 
     def _show_update_dialog(self, update_info):
-        # Prevent multiple dialogs
-        if self.showing_update_dialog:
-            return
-
-        self.showing_update_dialog = True
-
+        """Update and show the PRE-ALLOCATED confirmation dialog"""
         def perform_update(e):
             self.update_dialog.open = False
-            self.showing_update_dialog = False
             self.page.update()
 
             # Perform update in background (Fixed pattern: threading call outside UI block if needed)
@@ -1818,203 +1803,134 @@ class AppUI:
                 daemon=True
             ).start()
 
-        def close_dialog(e):
-            self.update_dialog.open = False
-            self.showing_update_dialog = False
-            self.page.update()
-
         # Update the pre-allocated dialog content
         self.update_dialog.title = ft.Text(
             f"Update Available: v{update_info['version']}", color=COLORS["text_main"])
-
+        
         self.update_dialog.content = ft.Column([
             ft.Text(f"Current version: v{VERSION}",
                     size=13, color=COLORS["text_muted"]),
             ft.Text(f"New version: v{update_info['version']}",
                     size=13, color=COLORS["success"]),
             ft.Divider(color=COLORS["border"]),
-            ft.Text("Release notes:", size=12, weight="w500",
-                    color=COLORS["text_main"]),
+            ft.Text("Release notes:", size=12, weight="w500", color=COLORS["text_main"]),
             ft.Text(update_info.get("release_notes", "No notes available")[:300],
                     size=11, color=COLORS["text_muted"], max_lines=5)
         ], tight=True, spacing=10)
-
+        
         self.update_dialog.actions = [
-            ft.TextButton("Later", on_click=close_dialog
-                          setattr(self.update_dialog, "open", False), self.page.update())),
-           ft.ElevatedButton(
-               "Update Now", on_click=perform_update, bgcolor=COLORS["accent"])
+            ft.TextButton("Later", on_click=lambda e: (
+                setattr(self.update_dialog, "open", False), self.page.update())),
+            ft.ElevatedButton("Update Now", on_click=perform_update, bgcolor=COLORS["accent"])
         ]
 
-            self.update_dialog.open= True
-            self.page.update()
+        self.update_dialog.open = True
+        self.page.update()
 
-        def _do_update(self, update_info):
+    def _do_update(self, update_info):
         """Perform the actual update with backup and rollback"""
         try:
-        import time
-
             self.log_msg("🔄 Starting update process...",
-                         color = COLORS["accent"])
-                         self.update_status_text.value= "Updating..."
-                         self.btn_check_update_menu.disabled= True  # Disable during update
-                         self.btn_check_update_menu.visible= False
-                         self.update_progress_container.visible= True
-                         self.update_progress_text.value= "Backing up..."
-                         self.update_progress_bar.value= None # Indeterminate
-                         self.page.update()
+                         color=COLORS["accent"])
+            self.update_status_text.value = "Updating..."
+            self.btn_check_update_menu.visible = False
+            self.update_progress_container.visible = True
+            self.update_progress_text.value = "Backing up..."
+            self.update_progress_bar.value = None # Indeterminate
+            self.page.update()
 
-                         # 1. Backup current version
-                         self.log_msg("💾 Backing up current version...",
-                         color = COLORS["text_muted"])
-                         success, backup_path= self.update_manager.backup_current_app()
+            # 1. Backup current version
+            self.log_msg("💾 Backing up current version...",
+                         color=COLORS["text_muted"])
+            success, backup_path = self.update_manager.backup_current_app()
 
-                         if not success:
-                         self.log_msg(
-                    f"❌ Backup failed: {backup_path}", color = COLORS["error"])
-                    self.update_status_text.value = "Backup failed"
-                    self.update_status_text.color = COLORS["error"]
-                    self.btn_check_update_menu.disabled = False
-                    self.btn_check_update_menu.visible = True
-                    self.page.update()
-                    return
-
-                    self.log_msg(
-                f"✅ Backup created: {backup_path}", color =COLORS["success"], is_technical=True)
-
-                # 2. Download update
-                self.log_msg("📥 Downloading update...", color=COLORS["text_muted"])
-
-                def download_progress(downloaded, total):
-                if total > 0:
-                percent = downloaded / total
-                    self.update_progress_bar.value= percent
-                    size_mb= total / (1024*1024)
-                    downloaded_mb= downloaded / (1024*1024)
-                    self.update_progress_text.value= f"Downloading v{update_info['version']}... {int(percent*100)}% ({downloaded_mb:.1f}/{size_mb:.1f}MB)"
-                    self.page.update()
-
-                success, result = self.update_manager.download_update(
-                update_info["download_url"], progress_callback =download_progress)
-
-                if not success:
+            if not success:
                 self.log_msg(
-                    f"❌ Download failed: {result}", color =COLORS["error"])
-                    self.update_status_text.value = "Download failed"
-                    self.update_status_text.color = COLORS["error"]
-                    self.update_progress_text.value = "Download failed"
-                    self.update_progress_bar.color = COLORS["error"]
-                    self.btn_check_update_menu.disabled = False
-                    self.btn_check_update_menu.visible = True
-                    self.page.update()
-                    return
-
-                    self.log_msg("✅ Download complete", color=COLORS["success"])
-
-                    # 3. Extract update
-                    self.log_msg("📦 Extracting update...", color=COLORS["text_muted"])
-                    self.update_progress_text.value = "Extracting..."
-                    self.update_progress_bar.value = None
-                    self.page.update()
-
-                    success, message = self.update_manager.extract_update(result)
-
-                    if not success:
-                    self.log_msg(
-                    f"❌ Extraction failed: {message}", color =COLORS["error"])
-                    self.log_msg("🔄 Rolling back to previous version...",
-                             color =COLORS["warning"])
-
-                             # Rollback
-                             self.update_manager.restore_from_backup(backup_path)
-                             self.update_status_text.value = "Update failed (rolled back)"
-                             self.update_status_text.color = COLORS["error"]
-                             self.update_progress_text.value = "Failed (rolled back)"
-                             self.update_progress_bar.color = COLORS["error"]
-                             self.update_progress_bar.value = 1.0
-                             self.btn_check_update_menu.disabled = False
-                             self.btn_check_update_menu.visible = True
-                             self.page.update()
-                             return
-
-                             self.log_msg("✅ Update extracted successfully",
-                         color =COLORS["success"])
-
-                         # 4. Cleanup old backups
-                         self.update_manager.cleanup_old_backups()
-
-                         # 5. Success! Show success message and auto-restart
-                         self.log_msg(
-                f"🎉 Update to v{update_info['version']} completed successfully!", color =COLORS["success"])
-
-                self.version_text.value = f"v{update_info['version']}"
-                self.update_status_text.value = "Update complete - Restarting in 5..."
-                self.update_status_text.color = COLORS["success"]
-                self.update_progress_text.value = "Update successful! Restarting..."
-                self.update_progress_bar.value = 1.0
-                self.update_progress_bar.color = COLORS["success"]
-                self.page.update()
-
-                # Show restart notification
-                snack = ft.SnackBar(
-                ft.Text("✅ Update thành công! Ứng dụng sẽ khởi động lại trong 5 giây...",
-                        color=COLORS["text_main"]),
-                bgcolor = COLORS["success"],
-                duration = 5000
-            )
-                self.page.snack_bar = snack
-                snack.open = True
-                self.page.update()
-
-                # Auto-restart after 5 seconds
-                for count_down in range(5, 0, -1):
-            time.sleep(1)
-                self.update_status_text.value= f"Restarting in {count_down}..."
-                self.page.update()
-
-                # Perform restart
-                self._restart_app()
-
-            except Exception as e:
-            self.log_msg(
-                f"❌ Update failed with error: {str(e)}", color =COLORS["error"])
-                self.update_status_text.value = "Update error"
+                    f"❌ Backup failed: {backup_path}", color=COLORS["error"])
+                self.update_status_text.value = "Backup failed"
                 self.update_status_text.color = COLORS["error"]
-                self.update_progress_text.value = "Update errored"
+                self.page.update()
+                return
+
+            self.log_msg(
+                f"✅ Backup created: {backup_path}", color=COLORS["success"], is_technical=True)
+
+            # 2. Download update
+            self.log_msg("📥 Downloading update...", color=COLORS["text_muted"])
+            
+            def download_progress(downloaded, total):
+                if total > 0:
+                    percent = downloaded / total
+                    self.update_progress_bar.value = percent
+                    self.update_progress_text.value = f"Downloading v{update_info['version']}... {int(percent*100)}%"
+                    self.page.update()
+
+            success, result = self.update_manager.download_update(
+                update_info["download_url"], progress_callback=download_progress)
+
+            if not success:
+                self.log_msg(
+                    f"❌ Download failed: {result}", color=COLORS["error"])
+                self.update_status_text.value = "Download failed"
+                self.update_status_text.color = COLORS["error"]
+                self.update_progress_text.value = "Download failed"
                 self.update_progress_bar.color = COLORS["error"]
-                self.btn_check_update_menu.disabled = False
                 self.btn_check_update_menu.visible = True
                 self.page.update()
+                return
 
-                def _restart_app(self):
-                """Restart the application"""
-                try:
-                import subprocess
-                import sys
+            self.log_msg("✅ Download complete", color=COLORS["success"])
 
-                # Get the current executable path
-                if hasattr(sys, 'frozen'):
-                # Running as PyInstaller exe
-                exe_path= sys.executable
-                else:
-                # Running as Python script
-                exe_path= sys.executable
-                # If running as script, restart main.py
-                exe_path= os.path.join(os.path.dirname(__file__), "..", "main.py")
+            # 3. Extract update
+            self.log_msg("📦 Extracting update...", color=COLORS["text_muted"])
+            self.update_progress_text.value = "Extracting..."
+            self.update_progress_bar.value = None
+            self.page.update()
+            
+            success, message = self.update_manager.extract_update(result)
 
-                # Close current app
-                self.page.window_close()
+            if not success:
+                self.log_msg(
+                    f"❌ Extraction failed: {message}", color=COLORS["error"])
+                self.log_msg("🔄 Rolling back to previous version...",
+                             color=COLORS["warning"])
 
-                # Wait a bit for clean shutdown
-                import time
-                time.sleep(0.5)
+                # Rollback
+                self.update_manager.restore_from_backup(backup_path)
+                self.update_status_text.value = "Update failed (rolled back)"
+                self.update_status_text.color = COLORS["error"]
+                self.update_progress_text.value = "Failed (rolled back)"
+                self.update_progress_bar.color = COLORS["error"]
+                self.update_progress_bar.value = 1.0
+                self.btn_check_update_menu.visible = True
+                self.page.update()
+                return
 
-                # Restart
-                if hasattr(sys, 'frozen'):
-                # PyInstaller exe - restart the exe
-                subprocess.Popen([sys.executable])
-                else:
-                # Python script - restart with python
-                subprocess.Popen([sys.executable, exe_path])
-                except Exception as e:
-                self.log_msg(f"❌ Could not auto-restart: {e}", color=COLORS["error"])
+            self.log_msg("✅ Update extracted successfully",
+                         color=COLORS["success"])
+
+            # 4. Cleanup old backups
+            self.update_manager.cleanup_old_backups()
+
+            # 5. Success!
+            self.log_msg(
+                f"🎉 Update to v{update_info['version']} completed successfully!", color=COLORS["success"])
+            self.log_msg("⚠️ Restart the app to use the new version",
+                         color=COLORS["warning"])
+
+            self.version_text.value = f"v{update_info['version']} (restart needed)"
+            self.update_status_text.value = "Update complete - restart needed"
+            self.update_status_text.color = COLORS["warning"]
+            self.update_progress_text.value = "Restart to install"
+            self.update_progress_bar.value = 1.0
+            self.page.update()
+
+        except Exception as e:
+            self.log_msg(
+                f"❌ Update failed with error: {str(e)}", color=COLORS["error"])
+            self.update_status_text.value = "Update error"
+            self.update_status_text.color = COLORS["error"]
+            self.update_progress_text.value = "Update errored"
+            self.update_progress_bar.color = COLORS["error"]
+            self.btn_check_update_menu.visible = True
+            self.page.update()
