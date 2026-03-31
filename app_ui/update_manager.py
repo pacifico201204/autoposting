@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 # App Version
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 

@@ -300,11 +300,38 @@ class AppUI:
             on_click=self.toggle_history_view
         )
 
+        # Version and Update display (in History tab)
+        self.version_text = ft.Text(
+            f"v{VERSION}",
+            size=12,
+            color=COLORS["text_muted"],
+            weight="w500"
+        )
+
+        self.update_button = ft.IconButton(
+            ft.Icons.SYSTEM_UPDATE,
+            icon_size=16,
+            icon_color=COLORS["accent"],
+            tooltip="Check for updates",
+            on_click=self.manual_check_updates,
+            visible=True
+        )
+
+        self.update_status_text = ft.Text(
+            "",
+            size=11,
+            color=COLORS["text_muted"]
+        )
+
         history_header = ft.Row([
             ft.Text("Post History", size=20, weight="bold",
                     color=COLORS["text_main"]),
+            ft.Container(expand=True),  # Spacer
+            self.version_text,
+            self.update_button,
+            self.update_status_text,
             btn_back_home
-        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center")
 
         self.post_history_col = ft.Column([
             history_header,
@@ -491,37 +518,6 @@ class AppUI:
             weight="w500"
         )
 
-        self.update_button = ft.IconButton(
-            ft.Icons.SYSTEM_UPDATE,
-            icon_size=16,
-            icon_color=COLORS["accent"],
-            tooltip="Check for updates",
-            on_click=self.manual_check_updates,
-            visible=True
-        )
-
-        self.update_status_text = ft.Text(
-            "",
-            size=11,
-            color=COLORS["text_muted"]
-        )
-
-        footer = ft.Container(
-            content=ft.Row([
-                self.version_text,
-                self.update_button,
-                self.update_status_text,
-                ft.Container(expand=True)  # Spacer
-            ], alignment="start", vertical_alignment="center", spacing=5),
-            padding=ft.padding.symmetric(horizontal=20, vertical=8),
-            bgcolor=COLORS["bg_card"],
-            border=ft.Border(top=ft.BorderSide(1, COLORS["border"]))
-        )
-
-        # ================= GHÉP TOÀN BỘ LAYOUT LẠI =================
-        # Chỉ dùng để track state, nút thật ở menu
-        self.btn_start = ft.FilledButton("Bắt đầu")
-        self.btn_stop = ft.Button("Dừng", disabled=True)
 
         main_layout = ft.Row([
             col_left,
@@ -532,8 +528,7 @@ class AppUI:
         self.page.add(
             ft.Column([
                 header,
-                main_layout,
-                footer
+                main_layout
             ], expand=True, spacing=0)
         )
         self.page.overlay.append(self.add_dialog)
