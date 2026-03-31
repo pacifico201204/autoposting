@@ -222,13 +222,19 @@ class AppUI:
 
     def make_card(self, title, content, expand=False, padding=15):
         """Hàm dựng các hộp nội dung (Cards) nhất quán"""
+        # Internal title padding if container padding is set to 0
+        title_padding = ft.padding.only(left=20, top=15, right=20) if padding == 0 else 0
+        
         container = ft.Container(
             content=ft.Column([
-                ft.Text(title, weight="bold", size=16,
-                        color=COLORS["text_main"]),
+                ft.Container(
+                    content=ft.Text(title, weight="bold", size=16,
+                            color=COLORS["text_main"]),
+                    padding=title_padding
+                ),
                 ft.Divider(color=COLORS["border"], height=1),
                 content
-            ], spacing=15, expand=expand),
+            ], spacing=0 if padding == 0 else 15, expand=expand),
             padding=padding,
             bgcolor=COLORS["bg_card"],
             border_radius=12,
@@ -587,20 +593,23 @@ class AppUI:
         # Toggle buttons row styling
         toggle_row = ft.Container(
             content=ft.Row([
-                ft.Text("Logs:", size=13, weight="bold",
-                        color=COLORS["text_main"]),
-                btn_user_messages,
-                btn_technical_logs,
+                ft.Text("Logs View:", size=12, weight="bold",
+                        color=COLORS["text_muted"]),
+                ft.Row([
+                    btn_user_messages,
+                    ft.VerticalDivider(color=COLORS["border"], width=1),
+                    btn_technical_logs,
+                ], spacing=10, alignment="center"),
                 ft.Container(expand=True),  # Spacer
                 ft.IconButton(
                     ft.Icons.FILE_DOWNLOAD_OUTLINED,
-                    tooltip="Export logs",
+                    tooltip="Export as .txt",
                     on_click=self.export_logs,
                     icon_color=COLORS["text_muted"],
                     icon_size=18
                 )
-            ], alignment="start", vertical_alignment="center", spacing=8),
-            padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            ], alignment="center", vertical_alignment="center", spacing=20),
+            padding=ft.padding.symmetric(horizontal=15, vertical=5),
             border_radius=ft.border_radius.vertical(top=8),
             bgcolor=COLORS["bg_card"],
             border=ft.Border(bottom=ft.BorderSide(1, COLORS["border"]))
