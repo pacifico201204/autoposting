@@ -251,6 +251,13 @@ class PostingEngine:
                 group_url = group.get("url")
                 group_name = group.get("name")
                 timestamp = datetime.now().strftime("%H:%M")
+                
+                # Update progress bar in UI
+                try:
+                    self.app.update_posting_progress(i, len(selected_groups), group_name)
+                except Exception as e:
+                    pass
+
                 self.log_msg(
                     f"[{timestamp}] #{i}/{len(selected_groups)} - Đang di chuyển tới Group: {group_name}...",
                     is_technical=True)

@@ -16,7 +16,7 @@ from pathlib import Path
 from logger_config import log_debug, log_info, log_error
 
 # App Version
-APP_VERSION = "1.3.2"
+APP_VERSION = "1.4.0"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
@@ -102,7 +102,7 @@ class UpdateManager:
         except Exception as e:
             return False, f"Backup failed: {str(e)}"
 
-    def download_update(self, download_url: str, output_file: str = "update.zip") -> tuple[bool, str]:
+    def download_update(self, download_url: str, output_file: str = "update.zip", progress_callback=None) -> tuple[bool, str]:
         """
         Download new version from GitHub
         Returns: (success: bool, file_path: str)
@@ -120,6 +120,8 @@ class UpdateManager:
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
+                        if progress_callback:
+                            progress_callback(downloaded, total)
 
             return True, output_file
 

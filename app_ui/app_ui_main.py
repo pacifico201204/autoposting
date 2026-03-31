@@ -126,6 +126,13 @@ class AppUI:
         self.update_button = None
         self.updating = False
 
+        self.posting_progress_container = None
+        self.update_progress_container = None
+        self.update_progress_text = None
+        self.update_progress_bar = None
+        self.posting_progress_text = None
+        self.posting_progress_bar = None
+
         self.setup_page()
         self.build_ui()
         self.populate_groups()
@@ -272,9 +279,43 @@ class AppUI:
         )
 
         # ================= CỘT TRÁI (MENU & CÔNG CỤ) - Chiếm khoảng 20% =================
+        # --- PROGRESS UI DEFINITIONS ---
+        # 1. Posting Progress Bar
+        self.posting_progress_text = ft.Text(
+            "", size=11, color=COLORS["text_muted"], weight="w500")
+        self.posting_progress_bar = ft.ProgressBar(
+            value=0, color=COLORS["accent"], bgcolor=COLORS["border"], height=4)
+        self.posting_progress_container = ft.Container(
+            content=ft.Column([
+                self.posting_progress_text,
+                self.posting_progress_bar
+            ], spacing=5),
+            margin=ft.margin.only(bottom=10, left=10, right=10),
+            visible=False
+        )
+
+        # 2. Update Progress Bar
+        self.update_progress_text = ft.Text(
+            "", size=11, color=COLORS["text_muted"], weight="w500")
+        self.update_progress_bar = ft.ProgressBar(
+            value=0, color=COLORS["success"], bgcolor=COLORS["border"], height=4)
+        self.update_progress_container = ft.Container(
+            content=ft.Column([
+                self.update_progress_text,
+                self.update_progress_bar
+            ], spacing=5),
+            margin=ft.margin.only(bottom=10, left=10, right=10),
+            visible=False
+        )
+
+        # Update button ref so we can hide it later
+        self.btn_check_update_menu = self.make_menu_item(
+            ft.Icons.SYSTEM_UPDATE, "Check Update", COLORS["accent"], self.manual_check_updates)
+
         menu_items = ft.Column([
             self.make_menu_item(ft.Icons.ROCKET_LAUNCH,
                                 "Start Auto", COLORS["accent"], self.start_auto),
+            self.posting_progress_container,
             self.make_menu_item(ft.Icons.STOP_CIRCLE, "Stop",
                                 COLORS["error"], self.stop_auto),
             ft.Divider(color=COLORS["border"]),
@@ -284,8 +325,8 @@ class AppUI:
                                 COLORS["text_main"], self.toggle_history_view),
             self.make_menu_item(ft.Icons.SETTINGS, "Settings",
                                 COLORS["text_main"], self.toggle_settings_view),
-            self.make_menu_item(ft.Icons.SYSTEM_UPDATE, "Check Update",
-                                COLORS["accent"], self.manual_check_updates),
+            self.btn_check_update_menu,
+            self.update_progress_container,
         ], spacing=5)
 
         col_left = ft.Container(
@@ -1378,6 +1419,7 @@ class AppUI:
             auto_runner.mark_finished()
             mod_guard.set_automation_running(False)
         finally:
+            self.update_posting_progress(0, 0, "", finished=True)
             loop.close()
 
     def stop_auto(self, e):
@@ -1386,6 +1428,33 @@ class AppUI:
         self.log_msg("Stopping auto...", color=COLORS["warning"])
         self.show_snack("Stopping auto. Please wait...",
                         color=COLORS["warning"])
+        self.posting_progress_text.value = "Đang dừng..."
+        self.posting_progress_bar.color = COLORS["error"]
+        self.page.update()
+
+    def update_posting_progress(self, current_index: int, total: int, current_group_name: str, finished: bool = False):
+        """Update the posting progress UI in the sidebar"""
+        if finished:
+            self.posting_progress_text.value = "✅ Hoàn thành 100%"
+            self.posting_progress_bar.value = 1.0
+            self.posting_progress_bar.color = COLORS["success"]
+            # After 3 seconds, hide it
+            threading.Timer(3.0, self._hide_posting_progress).start()
+        else:
+            self.posting_progress_container.visible = True
+            self.posting_progress_bar.color = COLORS["accent"]
+            # Calculate value
+            progress_value = current_index / total if total > 0 else 0
+            self.posting_progress_bar.value = progress_value
+            # Trim group name if too long
+            short_group = current_group_name[:15] + "..." if len(current_group_name) > 15 else current_group_name
+            self.posting_progress_text.value = f"Đang đăng: {current_index}/{total} ({short_group})"
+            
+        self.page.update()
+
+    def _hide_posting_progress(self):
+        self.posting_progress_container.visible = False
+        self.page.update()
 
     # NOTE: run_facebook_auto() has been moved to posting_engine.py (PostingEngine class)
     # This keeps AppUI focused on UI concerns while PostingEngine handles automation.
@@ -1722,6 +1791,10 @@ class AppUI:
             self.log_msg("🔄 Starting update process...",
                          color=COLORS["accent"])
             self.update_status_text.value = "Updating..."
+            self.btn_check_update_menu.visible = False
+            self.update_progress_container.visible = True
+            self.update_progress_text.value = "Backing up..."
+            self.update_progress_bar.value = None # Indeterminate
             self.page.update()
 
             # 1. Backup current version
@@ -1742,14 +1815,25 @@ class AppUI:
 
             # 2. Download update
             self.log_msg("📥 Downloading update...", color=COLORS["text_muted"])
+            
+            def download_progress(downloaded, total):
+                if total > 0:
+                    percent = downloaded / total
+                    self.update_progress_bar.value = percent
+                    self.update_progress_text.value = f"Downloading v{update_info['version']}... {int(percent*100)}%"
+                    self.page.update()
+
             success, result = self.update_manager.download_update(
-                update_info["download_url"])
+                update_info["download_url"], progress_callback=download_progress)
 
             if not success:
                 self.log_msg(
                     f"❌ Download failed: {result}", color=COLORS["error"])
                 self.update_status_text.value = "Download failed"
                 self.update_status_text.color = COLORS["error"]
+                self.update_progress_text.value = "Download failed"
+                self.update_progress_bar.color = COLORS["error"]
+                self.btn_check_update_menu.visible = True
                 self.page.update()
                 return
 
@@ -1757,6 +1841,10 @@ class AppUI:
 
             # 3. Extract update
             self.log_msg("📦 Extracting update...", color=COLORS["text_muted"])
+            self.update_progress_text.value = "Extracting..."
+            self.update_progress_bar.value = None
+            self.page.update()
+            
             success, message = self.update_manager.extract_update(result)
 
             if not success:
@@ -1769,6 +1857,10 @@ class AppUI:
                 self.update_manager.restore_from_backup(backup_path)
                 self.update_status_text.value = "Update failed (rolled back)"
                 self.update_status_text.color = COLORS["error"]
+                self.update_progress_text.value = "Failed (rolled back)"
+                self.update_progress_bar.color = COLORS["error"]
+                self.update_progress_bar.value = 1.0
+                self.btn_check_update_menu.visible = True
                 self.page.update()
                 return
 
@@ -1787,6 +1879,8 @@ class AppUI:
             self.version_text.value = f"v{update_info['version']} (restart needed)"
             self.update_status_text.value = "Update complete - restart needed"
             self.update_status_text.color = COLORS["warning"]
+            self.update_progress_text.value = "Restart to install"
+            self.update_progress_bar.value = 1.0
             self.page.update()
 
         except Exception as e:
@@ -1794,4 +1888,7 @@ class AppUI:
                 f"❌ Update failed with error: {str(e)}", color=COLORS["error"])
             self.update_status_text.value = "Update error"
             self.update_status_text.color = COLORS["error"]
+            self.update_progress_text.value = "Update errored"
+            self.update_progress_bar.color = COLORS["error"]
+            self.btn_check_update_menu.visible = True
             self.page.update()
