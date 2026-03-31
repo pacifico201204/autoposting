@@ -16,7 +16,7 @@ from pathlib import Path
 from logger_config import log_debug, log_info, log_error
 
 # App Version
-APP_VERSION = "1.3.13"
+APP_VERSION = "1.3.14"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
@@ -179,13 +179,13 @@ class UpdateManager:
 
             # Find the extracted AutoPostingTool folder or use root if files are at top level
             extracted_app = None
-            
+
             # First, try to find AutoPostingTool folder
             for item in temp_extract.iterdir():
                 if item.is_dir() and "AutoPostingTool" in item.name:
                     extracted_app = item
                     break
-            
+
             # If not found, check if main.py exists at root (files at top level)
             if not extracted_app:
                 main_py_at_root = False
@@ -193,7 +193,7 @@ class UpdateManager:
                     if item.name == "main.py" and item.is_file():
                         main_py_at_root = True
                         break
-                
+
                 if main_py_at_root:
                     # Files are at root level, use temp folder directly
                     extracted_app = temp_extract
