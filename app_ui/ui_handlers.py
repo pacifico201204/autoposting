@@ -251,12 +251,17 @@ def toggle_history_view(app_instance, e):
     app_instance.page.update()
 
 
-def show_snack(app_instance, message, color=COLORS["text_main"]):
-    """Hiển thị thông báo SnackBar"""
+def show_snack(app_instance, message, color=COLORS["bg_card"]):
+    """Hiển thị thông báo SnackBar - cải thiện UI"""
+    # Determine text color based on background
+    text_color = "white" if color in [COLORS["error"], COLORS["success"], COLORS["warning"], "#FF9800"] else "#000"
+    
     app_instance.page.overlay.append(
         ft.SnackBar(
-            ft.Text(message, color="white"),
+            ft.Text(message, color=text_color, size=14, weight="w500"),
             bgcolor=color,
+            bgcolor_opacity=0.95,
+            duration=3000,
             open=True
         )
     )

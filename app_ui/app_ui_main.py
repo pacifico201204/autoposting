@@ -819,12 +819,17 @@ class AppUI:
 
         return log_item
 
-    def show_snack(self, message, color=COLORS["text_main"]):
-        """Hiển thị thông báo (SnackBar) góc dưới màn hình"""
+    def show_snack(self, message, color=COLORS["bg_card"]):
+        """Hiển thị thông báo (SnackBar) góc dưới màn hình - cải thiện UI"""
+        # Determine text color based on background brightness
+        text_color = "white" if color in [COLORS["error"], COLORS["success"], COLORS["warning"], "#FF9800"] else "#000"
+        
         self.page.overlay.append(
             ft.SnackBar(
-                ft.Text(message, color="white"),
+                ft.Text(message, color=text_color, size=14, weight="w500"),
                 bgcolor=color,
+                bgcolor_opacity=0.95,
+                duration=3000,
                 open=True
             )
         )
@@ -1281,7 +1286,7 @@ class AppUI:
     def stop_auto(self, e):
         self.is_running = False
         self.log_msg("Stopping auto...", color=COLORS["warning"])
-        self.show_snack("Stopping auto. Please wait...")
+        self.show_snack("Stopping auto. Please wait...", color=COLORS["warning"])
 
     async def run_facebook_auto(self, selected_groups):
         import random

@@ -108,14 +108,19 @@ class LogManager:
         return log_item
 
     def show_snack(self, message, color=None):
-        """Hiển thị thông báo (SnackBar) góc dưới màn hình"""
+        """Hiển thị thông báo (SnackBar) góc dưới màn hình - cải thiện UI"""
         if color is None:
-            color = self.colors.get("text_main", "#E4E6EB")
+            color = self.colors.get("bg_card", "#242526")
+        
+        # Determine text color based on background
+        text_color = "white" if color in [self.colors.get("error"), self.colors.get("success"), self.colors.get("warning"), "#FF9800"] else "#000"
 
         self.app_ui.page.overlay.append(
             ft.SnackBar(
-                ft.Text(message, color="white"),
+                ft.Text(message, color=text_color, size=14, weight="w500"),
                 bgcolor=color,
+                bgcolor_opacity=0.95,
+                duration=3000,
                 open=True
             )
         )
