@@ -1372,6 +1372,13 @@ class AppUI:
                             color=COLORS["warning"])
             return
 
+        if self.updating:
+            self.show_snack("⚠️ Đang trong quá trình cập nhật! Vui lòng chờ.",
+                            color=COLORS["warning"])
+            self.log_msg("❌ Không thể chạy Auto trong khi đang tải cập nhật.",
+                         color=COLORS["warning"])
+            return
+
         selected_groups = self.get_selected_groups()
         if not selected_groups:
             self.show_snack("Please select at least one group!",
@@ -1691,6 +1698,13 @@ class AppUI:
         """Manual update check when user clicks button"""
         if self.updating:
             self.log_msg("Update already in progress...",
+                         color=COLORS["warning"])
+            return
+
+        if auto_runner.is_running():
+            self.show_snack("⚠️ Không thể cập nhật khi đang Auto-Post!",
+                            color=COLORS["warning"])
+            self.log_msg("❌ Dừng Auto-Post trước khi thực hiện cập nhật.",
                          color=COLORS["warning"])
             return
 

@@ -16,7 +16,7 @@ from pathlib import Path
 from logger_config import log_debug, log_info, log_error
 
 # App Version
-APP_VERSION = "1.3.3"
+APP_VERSION = "1.3.4"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
@@ -152,23 +152,43 @@ class UpdateManager:
             if not extracted_app:
                 return False, "Extracted folder not found"
 
-            # Remove old app (keep config)
+            # Robust overwrite for Windows (handles locked files by renaming them)
             if self.app_folder.exists():
-                # Keep config.yaml if exists
-                config_backup = None
-                if os.path.exists("config.yaml"):
-                    config_backup = Path("config_temp.yaml")
-                    shutil.copy("config.yaml", config_backup)
+                # 1. Backup config
+                config_bak = None
+                config_path = Path("config.yaml")
+                if config_path.exists():
+                    config_bak = Path("config_temp.yaml")
+                    shutil.copy(config_path, config_bak)
 
-                shutil.rmtree(self.app_folder)
+                # 2. Iterate through new app and copy into place
+                for src_item in extracted_app.rglob('*'):
+                    rel_path = src_item.relative_to(extracted_app)
+                    dest_target = self.app_folder / rel_path
 
-                # Move extracted to app folder
-                shutil.move(str(extracted_app), str(self.app_folder))
+                    if src_item.is_dir():
+                        dest_target.mkdir(parents=True, exist_ok=True)
+                    else:
+                        # If file exists and locked, rename first
+                        if dest_target.exists():
+                            try:
+                                dest_target.unlink()
+                            except Exception:
+                                # Locked? Rename to .old
+                                try:
+                                    temp_old = dest_target.with_suffix(dest_target.suffix + ".old")
+                                    if temp_old.exists():
+                                        temp_old.unlink(missing_ok=True)
+                                    os.rename(str(dest_target), str(temp_old))
+                                except Exception:
+                                    pass # Give up on this specific file
 
-                # Restore config.yaml
-                if config_backup and config_backup.exists():
-                    shutil.copy(config_backup, "config.yaml")
-                    config_backup.unlink()
+                        shutil.copy2(src_item, dest_target)
+
+                # 3. Restore config
+                if config_bak and config_bak.exists():
+                    shutil.copy(config_bak, config_path)
+                    config_bak.unlink()
 
             # Cleanup
             if temp_extract.exists():
