@@ -22,8 +22,10 @@ BACKUP_FOLDER = "app_backups"
 
 
 class UpdateManager:
-    def __init__(self):
+    def __init__(self, test_mode=False):
         self.current_version = APP_VERSION
+        self.test_mode = test_mode or os.path.exists(
+            "TEST_UPDATE_MODE")  # Enable via file
         self.backup_folder = Path(BACKUP_FOLDER)
         try:
             self.backup_folder.mkdir(exist_ok=True)
@@ -35,9 +37,20 @@ class UpdateManager:
 
     def check_for_updates(self) -> dict:
         """
-        Check GitHub for latest release
+        Check GitHub for latest release (or use test mode)
         Returns: {"has_update": bool, "version": str, "download_url": str}
         """
+        # Test mode - simulate version 1.3.13
+        if self.test_mode:
+            log_info("🧪 TEST MODE: Simulating update to 1.3.13")
+            return {
+                "has_update": True,
+                "version": "1.3.13",
+                "download_url": None,  # Will use local file
+                "release_notes": "Test Update 1.3.13\n- Fixed backup/restore flow\n- Improved error handling",
+                "error": None
+            }
+
         try:
             response = requests.get(
                 f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
@@ -88,10 +101,12 @@ class UpdateManager:
                 shutil.rmtree(backup_path)
 
             # Copy entire app folder, ignoring the backup folder, logs, and other temp files.
-            ignore_list = shutil.ignore_patterns(BACKUP_FOLDER, "logs", ".git", "__pycache__", "*.zip", "test_user_data", "fb_user_data_edge")
+            ignore_list = shutil.ignore_patterns(
+                BACKUP_FOLDER, "logs", ".git", "__pycache__", "*.zip", "test_user_data", "fb_user_data_edge")
 
             if self.app_folder.exists():
-                shutil.copytree(self.app_folder, backup_path, ignore=ignore_list)
+                shutil.copytree(self.app_folder, backup_path,
+                                ignore=ignore_list)
 
             # Also backup config
             config_backup = self.backup_folder / \
@@ -106,9 +121,27 @@ class UpdateManager:
 
     def download_update(self, download_url: str, output_file: str = "update.zip", progress_callback=None) -> tuple[bool, str]:
         """
-        Download new version from GitHub
+        Download new version from GitHub (or simulate for test mode)
         Returns: (success: bool, file_path: str)
         """
+        # Test mode - create mock update zip
+        if self.test_mode and download_url is None:
+            try:
+                log_info("🧪 TEST MODE: Creating mock update package...")
+
+                # Create a dummy zip file for testing
+                import tempfile
+                with zipfile.ZipFile(output_file, 'w') as zf:
+                    # Create mock AutoPostingTool folder structure
+                    zf.writestr('AutoPostingTool/VERSION', '1.3.13')
+                    zf.writestr('AutoPostingTool/update_info.txt',
+                                'Version 1.3.13 - Test Update\n- Fixed backup/restore flow\n- Improved error handling')
+
+                log_info(f"✅ Mock update package created: {output_file}")
+                return True, output_file
+            except Exception as e:
+                return False, f"Mock update creation failed: {str(e)}"
+
         try:
             response = requests.get(download_url, stream=True, timeout=300)
             response.raise_for_status()
@@ -178,12 +211,13 @@ class UpdateManager:
                             except Exception:
                                 # Locked? Rename to .old
                                 try:
-                                    temp_old = dest_target.with_suffix(dest_target.suffix + ".old")
+                                    temp_old = dest_target.with_suffix(
+                                        dest_target.suffix + ".old")
                                     if temp_old.exists():
                                         temp_old.unlink(missing_ok=True)
                                     os.rename(str(dest_target), str(temp_old))
                                 except Exception:
-                                    pass # Give up on this specific file
+                                    pass  # Give up on this specific file
 
                         shutil.copy2(src_item, dest_target)
 

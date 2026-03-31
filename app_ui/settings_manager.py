@@ -15,7 +15,6 @@ import flet as ft
 from utils import get_resource_path
 
 
-
 class SettingsManager:
     """Manage app settings UI and persistence"""
 
