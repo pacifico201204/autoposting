@@ -49,7 +49,7 @@ class PostingEngine:
 
         Args:
             app_ui: Reference to the AppUI instance for accessing:
-                - app_ui.is_running (read/write)
+                - auto_runner.is_running() (thread-safe state check)
                 - app_ui.text_content.value (read)
                 - app_ui.image_paths (read)
                 - app_ui.post_delay_min / post_delay_max (read)
@@ -84,16 +84,8 @@ class PostingEngine:
     async def run_facebook_auto(self, selected_groups):
         """
         Main automation loop - posts content to selected Facebook groups.
-
-        This method:
-        1. Launches browser with stealth mode
-        2. Waits for user login if needed
-        3. Iterates through groups, posting content + images
-        4. Handles errors, retries, and cleanup
-
-        Args:
-            selected_groups: List of group dicts with 'name' and 'url' keys
         """
+        self.log_msg(f"Automation thread started for {len(selected_groups)} groups.", is_technical=True)
         COLORS = self._get_colors()
         CONFIG = self._get_config()
 
@@ -173,13 +165,32 @@ class PostingEngine:
                 if not os.path.exists(user_data_dir):
                     os.makedirs(user_data_dir)
 
-                browser_context = await playwright_instance.chromium.launch_persistent_context(
-                    user_data_dir=user_data_dir,
-                    headless=False,
-                    channel="msedge",
-                    args=['--disable-blink-features=AutomationControlled']
-                )
-                self.pw_context = browser_context
+                self.log_msg(f"Launching Edge with data dir: {user_data_dir}", 
+                            color=COLORS["text_muted"], is_technical=True)
+                
+                try:
+                    browser_context = await playwright_instance.chromium.launch_persistent_context(
+                        user_data_dir=user_data_dir,
+                        headless=False,
+                        channel="msedge",
+                        args=['--disable-blink-features=AutomationControlled']
+                    )
+                    self.pw_context = browser_context
+                    self.log_msg("✓ Microsoft Edge launched.", 
+                                color=COLORS["success"], is_technical=True)
+                except Exception as launch_err:
+                    self.log_msg(f"⚠️ Edge launch failed: {str(launch_err)[:50]}", 
+                                color=COLORS["warning"], is_technical=True)
+                    self.log_msg("Attempting fallback to default Chromium...", 
+                                is_technical=True)
+                    browser_context = await playwright_instance.chromium.launch_persistent_context(
+                        user_data_dir=user_data_dir,
+                        headless=False,
+                        args=['--disable-blink-features=AutomationControlled']
+                    )
+                    self.pw_context = browser_context
+                    self.log_msg("✓ Fallback Chromium launched.", 
+                                color=COLORS["success"], is_technical=True)
 
             # Get existing page or create a new one
             pages = browser_context.pages
@@ -201,7 +212,7 @@ class PostingEngine:
                 self.log_msg(
                     f"Lỗi khi truy cập Facebook: {str(e)[:50]}",
                     color=COLORS["error"], is_technical=True)
-                if not self.app.is_running:
+                if not auto_runner.is_running():
                     return
 
             try:
@@ -243,7 +254,7 @@ class PostingEngine:
             failed_groups = []
 
             for i, group in enumerate(selected_groups, start=1):
-                if not self.app.is_running:
+                if not auto_runner.is_running():
                     self.log_msg("ĐÃ DỪNG AUTO BỞI NGƯỜI DÙNG.")
                     final_status = "Failed"
                     break
@@ -334,7 +345,7 @@ class PostingEngine:
                         except Exception:
                             pass
 
-                    if not self.app.is_running:
+                    if not auto_runner.is_running():
                         break
 
                     # === 1. CLICK POST INPUT BOX ===
@@ -359,7 +370,7 @@ class PostingEngine:
                         continue
 
                     await asyncio.sleep(3)
-                    if not self.app.is_running:
+                    if not auto_runner.is_running():
                         break
 
                     # === 2. TYPE CONTENT (if any) ===
@@ -403,7 +414,7 @@ class PostingEngine:
                         await safe_action(fill_text, log_prefix="Điền nội dung")
                         await asyncio.sleep(2)
 
-                    if not self.app.is_running:
+                    if not auto_runner.is_running():
                         break
 
                     # === 3. UPLOAD IMAGES (if any) ===
@@ -455,7 +466,7 @@ class PostingEngine:
                                 color=COLORS["error"])
                             continue
 
-                    if not self.app.is_running:
+                    if not auto_runner.is_running():
                         break
                     await asyncio.sleep(3)
 
@@ -686,7 +697,7 @@ class PostingEngine:
                 "Đang chờ người dùng đăng nhập tay... Bạn có 120 giây.",
                 color=COLORS["error"], is_technical=True)
             for _ in range(120):
-                if not self.app.is_running:
+                if not auto_runner.is_running():
                     return
                 try:
                     still_login = "login" in page_pw.url

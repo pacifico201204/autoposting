@@ -238,11 +238,17 @@ class AppUI:
             ], spacing=0 if padding == 0 else 15, expand=expand),
             padding=padding,
             bgcolor=COLORS["bg_card"],
-            border_radius=12,
+            border_radius=15, # Softer corners
             border=ft.Border.all(
                 1, COLORS["border"]) if COLORS["border"] else None,
             expand=expand,
-            margin=ft.margin.only(bottom=15)
+            margin=ft.margin.only(bottom=15),
+            shadow=ft.BoxShadow(
+                spread_radius=0,
+                blur_radius=20,
+                color=ft.colors.with_opacity(0.3, "black"),
+                offset=ft.Offset(0, 4),
+            )
         )
         return container
 
@@ -250,40 +256,38 @@ class AppUI:
         """Xây dựng và Lắp ráp Giao diện UI: LAYOUT 3 CỘT FACEBOOK NIGHT MODE"""
 
         # --- HEADER (Thanh điều hướng trên cùng giả lập Facebook) ---
-        header_content = [
-            ft.Row([
+        header_container = ft.Container(
+            content=ft.Row([
                 ft.Row([
-                    ft.Icon(ft.Icons.FACEBOOK,
-                            color=COLORS["accent"], size=40),
+                    ft.Icon(ft.Icons.FACEBOOK, color=COLORS["accent"], size=40),
                     ft.Text("Auto Posting by Tristan", size=24,
                             weight="w800", color=COLORS["text_main"])
                 ], spacing=10),
                 ft.Container(expand=True),  # Khoảng trống giữa
-                # Đã bỏ các icon ở góc phải theo yêu cầu
-            ], alignment="spaceBetween", vertical_alignment="center")
-        ]
+            ], alignment="spaceBetween", vertical_alignment="center"),
+            padding=ft.padding.only(left=20, right=20, top=10, bottom=10),
+            border=ft.Border(bottom=ft.BorderSide(1, COLORS["border"])),
+            bgcolor=COLORS["bg_card"]
+        )
+
+        header_items = [header_container]
 
         # Add dry run warning banner if enabled
         if CONFIG.get("app", {}).get("dry_run", False):
-            header_content.append(
+            header_items.append(
                 ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.WARNING, color="white", size=20),
-                        ft.Text("🧪 DRY RUN MODE - Không sẽ đăng bài thực tế",
+                        ft.Text("🧪 DRY RUN MODE - Sẽ không đăng bài thực tế",
                                 color="white", size=14, weight="bold")
-                    ], spacing=10, vertical_alignment="center"),
+                    ], spacing=10, vertical_alignment="center", alignment="center"),
                     bgcolor="#FF9800",
-                    padding=10,
-                    border_radius=6
+                    padding=8,
+                    width=float("inf") # Full width
                 )
             )
-
-        header = ft.Container(
-            content=ft.Column(header_content, spacing=8),
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            bgcolor=COLORS["bg_card"],
-            border=ft.Border(bottom=ft.BorderSide(1, COLORS["border"]))
-        )
+        
+        header = ft.Column(header_items, spacing=0)
 
         # ================= CỘT TRÁI (MENU & CÔNG CỤ) - Chiếm khoảng 20% =================
         # --- PROGRESS UI DEFINITIONS ---
@@ -678,22 +682,23 @@ class AppUI:
         self.page.update()
 
     def make_menu_item(self, icon, text, color, on_click):
-        """Tạo nút menu bên trái phong cách Facebook"""
+        """Tạo nút menu bên trái phong cách Facebook hiện đại"""
         return ft.Container(
             content=ft.Row([
-                ft.Icon(icon, color=color, size=28),
+                ft.Icon(icon, color=color, size=24),
                 ft.Text(text, size=15, weight="w500",
                         color=COLORS["text_main"])
-            ], spacing=15, expand=True),  # Expand the row so it captures clicks everywhere inside
-            padding=10,
-            border_radius=8,
+            ], spacing=15),
+            padding=ft.padding.symmetric(horizontal=15, vertical=12),
+            border_radius=10,
             on_click=on_click,
             ink=True,
-            on_hover=self.on_menu_hover
+            on_hover=self.on_menu_hover,
+            animate=ft.Animation(300, "decelerate")
         )
 
     def on_menu_hover(self, e):
-        e.control.bgcolor = COLORS["bg_card"] if e.data == "true" else "transparent"
+        e.control.bgcolor = ft.colors.with_opacity(0.1, COLORS["accent"]) if e.data == "true" else "transparent"
         e.control.update()
 
     def toggle_history_view(self, e):
@@ -1652,7 +1657,7 @@ class AppUI:
         """
         import threading
 
-        if self.is_running:
+        if auto_runner.is_running():
             self.show_snack("Auto is already running!",
                             color=COLORS["warning"])
             return
@@ -1670,7 +1675,9 @@ class AppUI:
                 color=COLORS["error"])
             return
 
-        self.is_running = True
+        # Use runner and guard
+        auto_runner.can_start()
+        mod_guard.set_automation_running(True)
         self.log_msg(
             f"✓ Tiếp tục đăng bài lên {len(groups_to_post)} nhóm...",
             color=COLORS["success"])
