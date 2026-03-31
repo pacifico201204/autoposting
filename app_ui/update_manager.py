@@ -1,0 +1,233 @@
+"""
+Update Manager - Handle app updates, backups, and rollback
+Features:
+  - Check for new releases on GitHub
+  - Auto-backup before update
+  - Download and extract new version
+  - Rollback to previous version if update fails
+"""
+
+import os
+import shutil
+import zipfile
+import requests
+from datetime import datetime
+from pathlib import Path
+
+# App Version
+APP_VERSION = "1.0"
+GITHUB_REPO = "pacifico201204/autoposting"
+BACKUP_FOLDER = "app_backups"
+
+
+class UpdateManager:
+    def __init__(self):
+        self.current_version = APP_VERSION
+        self.backup_folder = Path(BACKUP_FOLDER)
+        self.backup_folder.mkdir(exist_ok=True)
+        self.app_folder = Path("dist/AutoPostingTool") if os.path.exists("dist/AutoPostingTool") else Path(".")
+        
+    def check_for_updates(self) -> dict:
+        """
+        Check GitHub for latest release
+        Returns: {"has_update": bool, "version": str, "download_url": str}
+        """
+        try:
+            response = requests.get(
+                f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+                timeout=10
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            latest_version = data.get("tag_name", "").lstrip("v")
+            
+            # Compare versions
+            if self._compare_versions(latest_version, self.current_version) > 0:
+                # Get download URL for zip file
+                download_url = None
+                for asset in data.get("assets", []):
+                    if asset["name"].endswith(".zip"):
+                        download_url = asset["browser_download_url"]
+                        break
+                
+                return {
+                    "has_update": True,
+                    "version": latest_version,
+                    "download_url": download_url,
+                    "release_notes": data.get("body", ""),
+                    "error": None
+                }
+            
+            return {"has_update": False, "version": latest_version, "error": None}
+            
+        except Exception as e:
+            return {
+                "has_update": False,
+                "error": f"Failed to check updates: {str(e)}"
+            }
+    
+    def backup_current_app(self) -> tuple[bool, str]:
+        """
+        Backup current app version before update
+        Returns: (success: bool, backup_path: str)
+        """
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = self.backup_folder / f"backup_{self.current_version}_{timestamp}"
+            
+            # Create backup
+            if backup_path.exists():
+                shutil.rmtree(backup_path)
+            
+            # Copy entire app folder
+            if self.app_folder.exists():
+                shutil.copytree(self.app_folder, backup_path)
+            
+            # Also backup config
+            config_backup = self.backup_folder / f"config_{self.current_version}_{timestamp}.yaml"
+            if os.path.exists("config.yaml"):
+                shutil.copy("config.yaml", config_backup)
+            
+            return True, str(backup_path)
+            
+        except Exception as e:
+            return False, f"Backup failed: {str(e)}"
+    
+    def download_update(self, download_url: str, output_file: str = "update.zip") -> tuple[bool, str]:
+        """
+        Download new version from GitHub
+        Returns: (success: bool, file_path: str)
+        """
+        try:
+            response = requests.get(download_url, stream=True, timeout=300)
+            response.raise_for_status()
+            
+            # Download with progress
+            total = int(response.headers.get("content-length", 0))
+            downloaded = 0
+            
+            with open(output_file, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+            
+            return True, output_file
+            
+        except Exception as e:
+            return False, f"Download failed: {str(e)}"
+    
+    def extract_update(self, zip_file: str) -> tuple[bool, str]:
+        """
+        Extract downloaded zip to app folder
+        Returns: (success: bool, message: str)
+        """
+        try:
+            with zipfile.ZipFile(zip_file, "r") as zip_ref:
+                # Extract to temp first
+                temp_extract = Path("update_temp")
+                if temp_extract.exists():
+                    shutil.rmtree(temp_extract)
+                
+                zip_ref.extractall(temp_extract)
+            
+            # Find the extracted AutoPostingTool folder
+            extracted_app = None
+            for item in temp_extract.iterdir():
+                if item.is_dir() and "AutoPostingTool" in item.name:
+                    extracted_app = item
+                    break
+            
+            if not extracted_app:
+                return False, "Extracted folder not found"
+            
+            # Remove old app (keep config)
+            if self.app_folder.exists():
+                # Keep config.yaml if exists
+                config_backup = None
+                if os.path.exists("config.yaml"):
+                    config_backup = Path("config_temp.yaml")
+                    shutil.copy("config.yaml", config_backup)
+                
+                shutil.rmtree(self.app_folder)
+                
+                # Move extracted to app folder
+                shutil.move(str(extracted_app), str(self.app_folder))
+                
+                # Restore config.yaml
+                if config_backup and config_backup.exists():
+                    shutil.copy(config_backup, "config.yaml")
+                    config_backup.unlink()
+            
+            # Cleanup
+            if temp_extract.exists():
+                shutil.rmtree(temp_extract)
+            if os.path.exists(zip_file):
+                os.unlink(zip_file)
+            
+            return True, "Update extracted successfully"
+            
+        except Exception as e:
+            return False, f"Extraction failed: {str(e)}"
+    
+    def restore_from_backup(self, backup_path: str) -> tuple[bool, str]:
+        """
+        Restore app from backup if update fails
+        Returns: (success: bool, message: str)
+        """
+        try:
+            backup_dir = Path(backup_path)
+            
+            if not backup_dir.exists():
+                return False, f"Backup not found: {backup_path}"
+            
+            # Remove current app
+            if self.app_folder.exists():
+                shutil.rmtree(self.app_folder)
+            
+            # Restore from backup
+            shutil.copytree(backup_dir, self.app_folder)
+            
+            return True, "App restored from backup"
+            
+        except Exception as e:
+            return False, f"Restore failed: {str(e)}"
+    
+    def cleanup_old_backups(self, keep_count: int = 3):
+        """Keep only recent backups, cleanup old ones"""
+        try:
+            backups = sorted(
+                [d for d in self.backup_folder.iterdir() if d.is_dir()],
+                key=lambda x: x.stat().st_mtime,
+                reverse=True
+            )
+            
+            # Delete old backups after keeping recent ones
+            for old_backup in backups[keep_count:]:
+                shutil.rmtree(old_backup)
+                
+        except Exception as e:
+            print(f"Cleanup failed: {e}")
+    
+    def _compare_versions(self, v1: str, v2: str) -> int:
+        """
+        Compare versions: v1 > v2 returns 1, equal returns 0, v1 < v2 returns -1
+        """
+        try:
+            v1_parts = [int(x) for x in v1.split(".")]
+            v2_parts = [int(x) for x in v2.split(".")]
+            
+            # Pad shorter version with zeros
+            max_len = max(len(v1_parts), len(v2_parts))
+            v1_parts.extend([0] * (max_len - len(v1_parts)))
+            v2_parts.extend([0] * (max_len - len(v2_parts)))
+            
+            if v1_parts > v2_parts:
+                return 1
+            elif v1_parts < v2_parts:
+                return -1
+            else:
+                return 0
+        except:
+            return 0
