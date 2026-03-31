@@ -14,12 +14,14 @@ Auto-posting bot for Facebook groups with stealth mode to avoid account restrict
 
 ## 🚀 Quick Start
 
-### Run EXE (easiest)
-```bash
-dist/AutoPostingTool/AutoPostingTool.exe
-```
+### Download Pre-built EXE (Recommended)
+1. Go to [Releases](https://github.com/pacifico201204/autoposting/releases)
+2. Download `AutoPostingTool-v1.0.zip`
+3. Unzip and run `AutoPostingTool.exe`
 
-### Run from Python
+**No Python or dependencies needed!**
+
+### Run from Source (Developers)
 ```bash
 pip install -r requirements.txt
 python main.py
