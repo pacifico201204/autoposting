@@ -177,15 +177,28 @@ class UpdateManager:
 
                 zip_ref.extractall(temp_extract)
 
-            # Find the extracted AutoPostingTool folder
+            # Find the extracted AutoPostingTool folder or use root if files are at top level
             extracted_app = None
+            
+            # First, try to find AutoPostingTool folder
             for item in temp_extract.iterdir():
                 if item.is_dir() and "AutoPostingTool" in item.name:
                     extracted_app = item
                     break
-
+            
+            # If not found, check if main.py exists at root (files at top level)
             if not extracted_app:
-                return False, "Extracted folder not found"
+                main_py_at_root = False
+                for item in temp_extract.iterdir():
+                    if item.name == "main.py" and item.is_file():
+                        main_py_at_root = True
+                        break
+                
+                if main_py_at_root:
+                    # Files are at root level, use temp folder directly
+                    extracted_app = temp_extract
+                else:
+                    return False, "Extracted folder not found - no AutoPostingTool folder or main.py at root"
 
             # Robust overwrite for Windows (handles locked files by renaming them)
             if self.app_folder.exists():
