@@ -1,45 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Auto Posting Tool - PyInstaller Config
-# One-Dir Mode Only (simpler to update and distribute)
 
-import sys
-import os
-
-block_cipher = None
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        # Include Flet data files
-        (os.path.join(sys.base_prefix, 'Lib', 'site-packages', 'flet'), 'flet'),
-        # Include Playwright stealth files  
-        (os.path.join(sys.base_prefix, 'Lib', 'site-packages', 'playwright_stealth'), 'playwright_stealth'),
-        # Include config template
-        ('config.yaml', '.'),
-        # Include application icon
-        ('icon.ico', '.'),
-    ],
-    hiddenimports=[
-        'playwright_stealth',
-        'playwright',
-        'flet',
-        'yaml',
-        'asyncio',
-        'playwright.async_api',
-    ],
+    datas=[('C:\\Users\\lebin\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\playwright_stealth\\js', 'playwright_stealth/js')],
+    hiddenimports=['playwright_stealth', 'playwright'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
+    optimize=0,
 )
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
@@ -52,14 +27,16 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    icon='icon.ico',
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=['icon.ico'],
 )
-
-# One-Dir Distribution
 coll = COLLECT(
     exe,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
     upx=True,
