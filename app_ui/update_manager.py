@@ -16,7 +16,7 @@ from pathlib import Path
 from logger_config import log_debug, log_info, log_error
 
 # App Version
-APP_VERSION = "1.3.23"
+APP_VERSION = "1.3.24"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
@@ -176,12 +176,13 @@ class UpdateManager:
                             except Exception:
                                 # Locked? Rename to .old
                                 try:
-                                    temp_old = dest_target.with_suffix(dest_target.suffix + ".old")
+                                    temp_old = dest_target.with_suffix(
+                                        dest_target.suffix + ".old")
                                     if temp_old.exists():
                                         temp_old.unlink(missing_ok=True)
                                     os.rename(str(dest_target), str(temp_old))
                                 except Exception:
-                                    pass # Give up on this specific file
+                                    pass  # Give up on this specific file
 
                         shutil.copy2(src_item, dest_target)
 

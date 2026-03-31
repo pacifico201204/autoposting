@@ -1,3 +1,5 @@
+from utils import get_resource_path
+from thread_safety import get_auto_runner, get_modification_guard
 from exceptions import TooManyPostsException, ContextDestroyedException
 from detection_limiter import DetectionLimiter
 from validators import Validators, ValidationError
@@ -30,14 +32,11 @@ from playwright_stealth import Stealth
 import nest_asyncio
 nest_asyncio.apply()
 
-from thread_safety import get_auto_runner, get_modification_guard
 auto_runner = get_auto_runner()
 mod_guard = get_modification_guard()
 
 # Get base path for bundled resources (PyInstaller or development)
 
-
-from utils import get_resource_path
 
 # Load configuration from config.yaml
 
@@ -223,22 +222,24 @@ class AppUI:
     def make_card(self, title, content, expand=False, padding=15, center_title=False):
         """Hàm dựng các hộp nội dung (Cards) nhất quán"""
         # Internal title padding if container padding is set to 0
-        title_padding = ft.padding.only(left=20, top=15, right=20) if padding == 0 else 0
-        
+        title_padding = ft.padding.only(
+            left=20, top=15, right=20) if padding == 0 else 0
+
         container = ft.Container(
             content=ft.Column([
                 ft.Container(
                     content=ft.Text(title, weight="bold", size=16,
-                            color=COLORS["text_main"]),
+                                    color=COLORS["text_main"]),
                     padding=title_padding,
-                    alignment=ft.Alignment(0, 0) if center_title else ft.Alignment(-1, 0)
+                    alignment=ft.Alignment(
+                        0, 0) if center_title else ft.Alignment(-1, 0)
                 ),
                 ft.Divider(color=COLORS["border"], height=1),
                 content
             ], spacing=0 if padding == 0 else 15, expand=expand),
             padding=padding,
             bgcolor=COLORS["bg_card"],
-            border_radius=15, # Softer corners
+            border_radius=15,  # Softer corners
             border=ft.Border.all(
                 1, COLORS["border"]) if COLORS["border"] else None,
             expand=expand,
@@ -246,7 +247,7 @@ class AppUI:
             shadow=ft.BoxShadow(
                 spread_radius=0,
                 blur_radius=20,
-                color="#4D000000", # Black with ~30% opacity
+                color="#4D000000",  # Black with ~30% opacity
                 offset=ft.Offset(0, 4),
             )
         )
@@ -259,7 +260,8 @@ class AppUI:
         header_container = ft.Container(
             content=ft.Row([
                 ft.Row([
-                    ft.Icon(ft.Icons.FACEBOOK, color=COLORS["accent"], size=40),
+                    ft.Icon(ft.Icons.FACEBOOK,
+                            color=COLORS["accent"], size=40),
                     ft.Text("Auto Posting by Tristan", size=24,
                             weight="w800", color=COLORS["text_main"])
                 ], spacing=10),
@@ -283,10 +285,10 @@ class AppUI:
                     ], spacing=10, vertical_alignment="center", alignment="center"),
                     bgcolor="#FF9800",
                     padding=8,
-                    width=float("inf") # Full width
+                    width=float("inf")  # Full width
                 )
             )
-        
+
         header = ft.Column(header_items, spacing=0)
 
         # ================= CỘT TRÁI (MENU & CÔNG CỤ) - Chiếm khoảng 20% =================
@@ -573,7 +575,8 @@ class AppUI:
         self.update_dialog = ft.AlertDialog(
             title=ft.Text("Mới nhất", color=COLORS["text_main"]),
             bgcolor=COLORS["bg_card"],
-            content=ft.Text("Đang tải dữ liệu...", size=13, color=COLORS["text_muted"]),
+            content=ft.Text("Đang tải dữ liệu...", size=13,
+                            color=COLORS["text_muted"]),
             actions=[]
         )
 
@@ -1480,9 +1483,10 @@ class AppUI:
             progress_value = current_index / total if total > 0 else 0
             self.posting_progress_bar.value = progress_value
             # Trim group name if too long
-            short_group = current_group_name[:15] + "..." if len(current_group_name) > 15 else current_group_name
+            short_group = current_group_name[:15] + "..." if len(
+                current_group_name) > 15 else current_group_name
             self.posting_progress_text.value = f"Đang đăng: {current_index}/{total} ({short_group})"
-            
+
         self.page.update()
 
     def _hide_posting_progress(self):
@@ -1517,14 +1521,17 @@ class AppUI:
             # Build info text
             info_parts = []
             info_parts.append(f"⏰ Thời gian crash: {time_str}")
-            info_parts.append(f"📊 Đã đăng: {summary['posted']}/{summary['total']} nhóm")
-            info_parts.append(f"📋 Còn lại: {summary['remaining']} nhóm chưa đăng")
+            info_parts.append(
+                f"📊 Đã đăng: {summary['posted']}/{summary['total']} nhóm")
+            info_parts.append(
+                f"📋 Còn lại: {summary['remaining']} nhóm chưa đăng")
             if summary["has_content"]:
                 info_parts.append(f"📝 Có nội dung text")
             if summary["has_images"]:
                 info_parts.append(f"🖼️ Có {summary['image_count']} ảnh")
             if summary["failed_groups"]:
-                info_parts.append(f"❌ Nhóm lỗi: {', '.join(summary['failed_groups'][:3])}")
+                info_parts.append(
+                    f"❌ Nhóm lỗi: {', '.join(summary['failed_groups'][:3])}")
 
             info_text = "\n".join(info_parts)
 
@@ -1742,7 +1749,7 @@ class AppUI:
         self.update_button.disabled = True
         self.update_status_text.value = "Checking..."
         self.update_status_text.color = COLORS["accent"]
-        
+
         # Immediate feedback SnackBar (Request: "hiện lên luôn")
         snack = ft.SnackBar(ft.Text("🔍 Đang kiểm tra phiên bản mới..."))
         self.page.snack_bar = snack
@@ -1806,22 +1813,24 @@ class AppUI:
         # Update the pre-allocated dialog content
         self.update_dialog.title = ft.Text(
             f"Update Available: v{update_info['version']}", color=COLORS["text_main"])
-        
+
         self.update_dialog.content = ft.Column([
             ft.Text(f"Current version: v{VERSION}",
                     size=13, color=COLORS["text_muted"]),
             ft.Text(f"New version: v{update_info['version']}",
                     size=13, color=COLORS["success"]),
             ft.Divider(color=COLORS["border"]),
-            ft.Text("Release notes:", size=12, weight="w500", color=COLORS["text_main"]),
+            ft.Text("Release notes:", size=12, weight="w500",
+                    color=COLORS["text_main"]),
             ft.Text(update_info.get("release_notes", "No notes available")[:300],
                     size=11, color=COLORS["text_muted"], max_lines=5)
         ], tight=True, spacing=10)
-        
+
         self.update_dialog.actions = [
             ft.TextButton("Later", on_click=lambda e: (
                 setattr(self.update_dialog, "open", False), self.page.update())),
-            ft.ElevatedButton("Update Now", on_click=perform_update, bgcolor=COLORS["accent"])
+            ft.ElevatedButton(
+                "Update Now", on_click=perform_update, bgcolor=COLORS["accent"])
         ]
 
         self.update_dialog.open = True
@@ -1836,7 +1845,7 @@ class AppUI:
             self.btn_check_update_menu.visible = False
             self.update_progress_container.visible = True
             self.update_progress_text.value = "Backing up..."
-            self.update_progress_bar.value = None # Indeterminate
+            self.update_progress_bar.value = None  # Indeterminate
             self.page.update()
 
             # 1. Backup current version
@@ -1857,7 +1866,7 @@ class AppUI:
 
             # 2. Download update
             self.log_msg("📥 Downloading update...", color=COLORS["text_muted"])
-            
+
             def download_progress(downloaded, total):
                 if total > 0:
                     percent = downloaded / total
@@ -1886,7 +1895,7 @@ class AppUI:
             self.update_progress_text.value = "Extracting..."
             self.update_progress_bar.value = None
             self.page.update()
-            
+
             success, message = self.update_manager.extract_update(result)
 
             if not success:

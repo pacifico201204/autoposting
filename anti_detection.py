@@ -86,6 +86,30 @@ class BrowserFingerprint:
                     Promise.resolve({state: Notification.permission}) :
                     originalQuery(parameters)
                 );
+                
+                // Suppress Facebook performance monitoring errors (mgt.clearMarks)
+                if (window.mgt) {
+                    const originalClearMarks = window.mgt.clearMarks;
+                    if (originalClearMarks && typeof originalClearMarks === 'function') {
+                        window.mgt.clearMarks = function(...args) {
+                            try {
+                                return originalClearMarks.apply(this, args);
+                            } catch (e) {
+                                console.debug('mgt.clearMarks error suppressed:', e);
+                                return undefined;
+                            }
+                        };
+                    }
+                }
+                
+                // Suppress all Facebook internal errors from console
+                const originalError = console.error;
+                console.error = function(...args) {
+                    const msg = args.join(' ');
+                    if (!msg.includes('mgt.') && !msg.includes('Facebook')) {
+                        originalError.apply(console, args);
+                    }
+                };
             """)
             return True
         except Exception as e:
