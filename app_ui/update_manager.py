@@ -16,7 +16,7 @@ from pathlib import Path
 from logger_config import log_debug, log_info, log_error
 
 # App Version
-APP_VERSION = "1.3.11"
+APP_VERSION = "1.3.12"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
@@ -87,9 +87,11 @@ class UpdateManager:
             if backup_path.exists():
                 shutil.rmtree(backup_path)
 
-            # Copy entire app folder
+            # Copy entire app folder, ignoring the backup folder, logs, and other temp files.
+            ignore_list = shutil.ignore_patterns(BACKUP_FOLDER, "logs", ".git", "__pycache__", "*.zip", "test_user_data", "fb_user_data_edge")
+
             if self.app_folder.exists():
-                shutil.copytree(self.app_folder, backup_path)
+                shutil.copytree(self.app_folder, backup_path, ignore=ignore_list)
 
             # Also backup config
             config_backup = self.backup_folder / \
