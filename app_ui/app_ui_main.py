@@ -100,7 +100,7 @@ class AppUI:
         self.history_manager = HistoryManager(self)
         self.log_manager = LogManager(self)
         self.update_manager = UpdateManager()
-        
+
         # Update UI elements (will be set in build_ui)
         self.version_text = None
         self.update_button = None
@@ -109,7 +109,7 @@ class AppUI:
         self.setup_page()
         self.build_ui()
         self.populate_groups()
-        
+
         # Check for updates in background
         self.check_for_updates_async()
 
@@ -490,7 +490,7 @@ class AppUI:
             color=COLORS["text_muted"],
             weight="w500"
         )
-        
+
         self.update_button = ft.IconButton(
             ft.Icons.SYSTEM_UPDATE,
             icon_size=16,
@@ -499,13 +499,13 @@ class AppUI:
             on_click=self.manual_check_updates,
             visible=True
         )
-        
+
         self.update_status_text = ft.Text(
             "",
             size=11,
             color=COLORS["text_muted"]
         )
-        
+
         footer = ft.Container(
             content=ft.Row([
                 self.version_text,
@@ -1824,16 +1824,17 @@ class AppUI:
 
     def check_for_updates_async(self):
         """Check for updates in background (non-blocking)"""
-        threading.Thread(target=self._check_updates_thread, daemon=True).start()
-    
+        threading.Thread(target=self._check_updates_thread,
+                         daemon=True).start()
+
     def _check_updates_thread(self):
         """Background thread to check for updates"""
         try:
             import time
             time.sleep(2)  # Wait for UI to load first
-            
+
             update_info = self.update_manager.check_for_updates()
-            
+
             if update_info.get("has_update"):
                 self.page.snack_bar = ft.SnackBar(
                     ft.Text(f"✨ Update v{update_info['version']} available!"),
@@ -1845,161 +1846,186 @@ class AppUI:
             else:
                 self.update_status_text.value = "Latest version"
                 self.update_status_text.color = COLORS["text_muted"]
-            
+
             self.page.update()
         except Exception as e:
-            self.log_msg(f"Update check failed: {str(e)}", color=COLORS["warning"], is_technical=True)
-    
+            self.log_msg(
+                f"Update check failed: {str(e)}", color=COLORS["warning"], is_technical=True)
+
     def manual_check_updates(self, e):
         """Manual update check when user clicks button"""
         if self.updating:
-            self.log_msg("Update already in progress...", color=COLORS["warning"])
+            self.log_msg("Update already in progress...",
+                         color=COLORS["warning"])
             return
-        
+
         self.updating = True
         self.update_button.disabled = True
         self.update_status_text.value = "Checking..."
         self.update_status_text.color = COLORS["accent"]
         self.page.update()
-        
+
         threading.Thread(
             target=self._perform_update_check,
             daemon=True
         ).start()
-    
+
     def _perform_update_check(self):
         """Perform update check in background"""
         try:
             update_info = self.update_manager.check_for_updates()
-            
+
             if update_info.get("error"):
-                self.log_msg(f"❌ {update_info['error']}", color=COLORS["error"])
+                self.log_msg(
+                    f"❌ {update_info['error']}", color=COLORS["error"])
                 self.update_status_text.value = "Check failed"
                 self.update_status_text.color = COLORS["error"]
             elif update_info.get("has_update"):
-                self.log_msg(f"✨ New version available: v{update_info['version']}", color=COLORS["success"])
+                self.log_msg(
+                    f"✨ New version available: v{update_info['version']}", color=COLORS["success"])
                 self.update_status_text.value = f"v{update_info['version']} available"
                 self.update_status_text.color = COLORS["success"]
-                
+
                 # Show update dialog
                 self._show_update_dialog(update_info)
             else:
-                self.log_msg(f"✅ You're up to date (v{VERSION})", color=COLORS["success"])
+                self.log_msg(
+                    f"✅ You're up to date (v{VERSION})", color=COLORS["success"])
                 self.update_status_text.value = "Latest version"
                 self.update_status_text.color = COLORS["text_muted"]
-        
+
         except Exception as e:
-            self.log_msg(f"❌ Update check failed: {str(e)}", color=COLORS["error"])
+            self.log_msg(
+                f"❌ Update check failed: {str(e)}", color=COLORS["error"])
             self.update_status_text.value = "Check failed"
             self.update_status_text.color = COLORS["error"]
-        
+
         finally:
             self.updating = False
             self.update_button.disabled = False
             self.page.update()
-    
+
     def _show_update_dialog(self, update_info):
         """Show update confirmation dialog"""
         def perform_update(e):
             dlg.open = False
             self.page.update()
-            
+
             # Perform update in background
             threading.Thread(
                 target=self._do_update,
                 args=(update_info,),
                 daemon=True
             ).start()
-        
+
         dlg = ft.AlertDialog(
-            title=ft.Text(f"Update Available: v{update_info['version']}", color=COLORS["text_main"]),
+            title=ft.Text(
+                f"Update Available: v{update_info['version']}", color=COLORS["text_main"]),
             bgcolor=COLORS["bg_card"],
             content=ft.Column([
-                ft.Text(f"Current version: v{VERSION}", size=13, color=COLORS["text_muted"]),
-                ft.Text(f"New version: v{update_info['version']}", size=13, color=COLORS["success"]),
-                ft.Divider(color=COLORS["border"]),
-                ft.Text("Release notes:", size=12, weight="w500", color=COLORS["text_main"]),
+                ft.Text(f"Current version: v{VERSION}",
+                        size=13, color=COLORS["text_muted"]),
                 ft.Text(
-                    update_info.get("release_notes", "No notes available")[:300],
+                    f"New version: v{update_info['version']}", size=13, color=COLORS["success"]),
+                ft.Divider(color=COLORS["border"]),
+                ft.Text("Release notes:", size=12, weight="w500",
+                        color=COLORS["text_main"]),
+                ft.Text(
+                    update_info.get("release_notes",
+                                    "No notes available")[:300],
                     size=11,
                     color=COLORS["text_muted"],
                     max_lines=5
                 )
             ], tight=True, spacing=10),
             actions=[
-                ft.TextButton("Later", on_click=lambda e: (setattr(dlg, "open", False), self.page.update())),
-                ft.ElevatedButton("Update Now", on_click=perform_update, bgcolor=COLORS["accent"])
+                ft.TextButton("Later", on_click=lambda e: (
+                    setattr(dlg, "open", False), self.page.update())),
+                ft.ElevatedButton(
+                    "Update Now", on_click=perform_update, bgcolor=COLORS["accent"])
             ]
         )
-        
+
         self.page.dialog = dlg
         dlg.open = True
         self.page.update()
-    
+
     def _do_update(self, update_info):
         """Perform the actual update with backup and rollback"""
         try:
-            self.log_msg("🔄 Starting update process...", color=COLORS["accent"])
+            self.log_msg("🔄 Starting update process...",
+                         color=COLORS["accent"])
             self.update_status_text.value = "Updating..."
             self.page.update()
-            
+
             # 1. Backup current version
-            self.log_msg("💾 Backing up current version...", color=COLORS["text_muted"])
+            self.log_msg("💾 Backing up current version...",
+                         color=COLORS["text_muted"])
             success, backup_path = self.update_manager.backup_current_app()
-            
+
             if not success:
-                self.log_msg(f"❌ Backup failed: {backup_path}", color=COLORS["error"])
+                self.log_msg(
+                    f"❌ Backup failed: {backup_path}", color=COLORS["error"])
                 self.update_status_text.value = "Backup failed"
                 self.update_status_text.color = COLORS["error"]
                 self.page.update()
                 return
-            
-            self.log_msg(f"✅ Backup created: {backup_path}", color=COLORS["success"], is_technical=True)
-            
+
+            self.log_msg(
+                f"✅ Backup created: {backup_path}", color=COLORS["success"], is_technical=True)
+
             # 2. Download update
             self.log_msg("📥 Downloading update...", color=COLORS["text_muted"])
-            success, result = self.update_manager.download_update(update_info["download_url"])
-            
+            success, result = self.update_manager.download_update(
+                update_info["download_url"])
+
             if not success:
-                self.log_msg(f"❌ Download failed: {result}", color=COLORS["error"])
+                self.log_msg(
+                    f"❌ Download failed: {result}", color=COLORS["error"])
                 self.update_status_text.value = "Download failed"
                 self.update_status_text.color = COLORS["error"]
                 self.page.update()
                 return
-            
+
             self.log_msg("✅ Download complete", color=COLORS["success"])
-            
+
             # 3. Extract update
             self.log_msg("📦 Extracting update...", color=COLORS["text_muted"])
             success, message = self.update_manager.extract_update(result)
-            
+
             if not success:
-                self.log_msg(f"❌ Extraction failed: {message}", color=COLORS["error"])
-                self.log_msg("🔄 Rolling back to previous version...", color=COLORS["warning"])
-                
+                self.log_msg(
+                    f"❌ Extraction failed: {message}", color=COLORS["error"])
+                self.log_msg("🔄 Rolling back to previous version...",
+                             color=COLORS["warning"])
+
                 # Rollback
                 self.update_manager.restore_from_backup(backup_path)
                 self.update_status_text.value = "Update failed (rolled back)"
                 self.update_status_text.color = COLORS["error"]
                 self.page.update()
                 return
-            
-            self.log_msg("✅ Update extracted successfully", color=COLORS["success"])
-            
+
+            self.log_msg("✅ Update extracted successfully",
+                         color=COLORS["success"])
+
             # 4. Cleanup old backups
             self.update_manager.cleanup_old_backups()
-            
+
             # 5. Success!
-            self.log_msg(f"🎉 Update to v{update_info['version']} completed successfully!", color=COLORS["success"])
-            self.log_msg("⚠️ Restart the app to use the new version", color=COLORS["warning"])
-            
+            self.log_msg(
+                f"🎉 Update to v{update_info['version']} completed successfully!", color=COLORS["success"])
+            self.log_msg("⚠️ Restart the app to use the new version",
+                         color=COLORS["warning"])
+
             self.version_text.value = f"v{update_info['version']} (restart needed)"
             self.update_status_text.value = "Update complete - restart needed"
             self.update_status_text.color = COLORS["warning"]
             self.page.update()
-        
+
         except Exception as e:
-            self.log_msg(f"❌ Update failed with error: {str(e)}", color=COLORS["error"])
+            self.log_msg(
+                f"❌ Update failed with error: {str(e)}", color=COLORS["error"])
             self.update_status_text.value = "Update error"
             self.update_status_text.color = COLORS["error"]
             self.page.update()
