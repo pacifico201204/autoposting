@@ -25,14 +25,20 @@ def make_card(title, content, expand=False, padding=15):
     """Hàm dựng các hộp nội dung (Cards) nhất quán"""
     container = ft.Container(
         content=ft.Column([
-            ft.Text(title, weight="bold", size=16, color=COLORS["text_main"]),
+            ft.Container(
+                content=ft.Text(title, weight="bold", size=16,
+                                color=COLORS["text_main"], text_align=ft.TextAlign.CENTER),
+                alignment=ft.alignment.center,
+                expand=True
+            ),
             ft.Divider(color=COLORS["border"], height=1),
             content
         ], spacing=15, expand=expand),
         padding=padding,
         bgcolor=COLORS["bg_card"],
         border_radius=12,
-        border=ft.Border.all(1, COLORS["border"]) if COLORS["border"] else None,
+        border=ft.Border.all(1, COLORS["border"]
+                             ) if COLORS["border"] else None,
         expand=expand,
         margin=ft.margin.only(bottom=15)
     )
@@ -45,7 +51,8 @@ def make_menu_item(icon, text, color, on_click):
         content=ft.Row(
             [
                 ft.Icon(icon, size=20, color=color),
-                ft.Text(text, size=14, weight="w500", color=COLORS["text_main"], expand=True)
+                ft.Text(text, size=14, weight="w500",
+                        color=COLORS["text_main"], expand=True)
             ],
             spacing=10,
             alignment="start"
@@ -74,7 +81,8 @@ def build_header():
         content=ft.Row([
             ft.Row([
                 ft.Icon(ft.Icons.FACEBOOK, color=COLORS["accent"], size=40),
-                ft.Text("Auto Posting by Tristan", size=24, weight="w800", color=COLORS["text_main"])
+                ft.Text("Auto Posting by Tristan", size=24,
+                        weight="w800", color=COLORS["text_main"])
             ], spacing=10),
             ft.Container(expand=True),  # Khoảng trống giữa
         ], alignment="spaceBetween", vertical_alignment="center"),
@@ -88,14 +96,19 @@ def build_header():
 def build_left_menu(start_auto_cb, stop_auto_cb, add_group_cb, settings_cb, history_cb):
     """Xây dựng menu bên trái"""
     menu_items = ft.Column([
-        make_menu_item(ft.Icons.ROCKET_LAUNCH, "Start Auto", COLORS["accent"], start_auto_cb),
-        make_menu_item(ft.Icons.STOP_CIRCLE, "Stop", COLORS["error"], stop_auto_cb),
+        make_menu_item(ft.Icons.ROCKET_LAUNCH, "Start Auto",
+                       COLORS["accent"], start_auto_cb),
+        make_menu_item(ft.Icons.STOP_CIRCLE, "Stop",
+                       COLORS["error"], stop_auto_cb),
         ft.Divider(color=COLORS["border"]),
-        make_menu_item(ft.Icons.GROUP_ADD, "Add Group", COLORS["success"], add_group_cb),
-        make_menu_item(ft.Icons.SETTINGS, "Delay", COLORS["text_main"], settings_cb),
-        make_menu_item(ft.Icons.HISTORY, "History", COLORS["text_main"], history_cb),
+        make_menu_item(ft.Icons.GROUP_ADD, "Add Group",
+                       COLORS["success"], add_group_cb),
+        make_menu_item(ft.Icons.SETTINGS, "Delay",
+                       COLORS["text_main"], settings_cb),
+        make_menu_item(ft.Icons.HISTORY, "History",
+                       COLORS["text_main"], history_cb),
     ], spacing=5)
-    
+
     col_left = ft.Container(
         content=menu_items,
         padding=20,
@@ -120,7 +133,8 @@ def build_center_compose():
         cursor_color=COLORS["accent"],
         height=300
     )
-    card_content = make_card("Create Post", ft.Column([text_content], expand=True), expand=False)
+    card_content = make_card("Create Post", ft.Column(
+        [text_content], expand=True), expand=False)
 
     # 2. Image paste button
     btn_paste_image = ft.ElevatedButton(
@@ -146,7 +160,8 @@ def build_center_compose():
     )
 
     card_image = make_card("Attached Media", album_controls, expand=False)
-    post_compose_col = ft.Column([card_content, card_image], scroll="adaptive", expand=True)
+    post_compose_col = ft.Column(
+        [card_content, card_image], scroll="adaptive", expand=True)
 
     # 3. History view (initially hidden)
     history_list_view = ft.ListView(expand=True, spacing=10, auto_scroll=False)
@@ -158,7 +173,8 @@ def build_center_compose():
     )
 
     history_header = ft.Row([
-        ft.Text("Post History", size=20, weight="bold", color=COLORS["text_main"]),
+        ft.Text("Post History", size=20, weight="bold",
+                color=COLORS["text_main"]),
         btn_back_home
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
@@ -288,14 +304,17 @@ def build_right_panel(toggle_log_view_cb, export_logs_cb):
 def build_dialogs():
     """Xây dựng các dialog (add group, settings)"""
     # Add group dialog
-    add_name_input = ft.TextField(label="Group Name", border_color=COLORS["border"], color=COLORS["text_main"])
-    add_url_input = ft.TextField(label="Group URL", border_color=COLORS["border"], color=COLORS["text_main"])
+    add_name_input = ft.TextField(
+        label="Group Name", border_color=COLORS["border"], color=COLORS["text_main"])
+    add_url_input = ft.TextField(
+        label="Group URL", border_color=COLORS["border"], color=COLORS["text_main"])
     add_dialog = ft.AlertDialog(
         title=ft.Text("Add New Group", color=COLORS["text_main"]),
         bgcolor=COLORS["bg_card"],
         content=ft.Column([add_name_input, add_url_input], tight=True),
         actions=[
-            ft.TextButton("Cancel", style=ft.ButtonStyle(color=COLORS["text_muted"])),
+            ft.TextButton("Cancel", style=ft.ButtonStyle(
+                color=COLORS["text_muted"])),
             ft.TextButton("Save", style=ft.ButtonStyle(color=COLORS["accent"]))
         ]
     )
@@ -321,11 +340,14 @@ def build_dialogs():
         title=ft.Text("Random Delay Settings", color=COLORS["text_main"]),
         bgcolor=COLORS["bg_card"],
         content=ft.Column([
-            ft.Row([delay_min_input, ft.Text("-", color=COLORS["text_main"]), delay_max_input]),
-            ft.Text("Random wait time between posts (seconds)", color=COLORS["text_muted"], size=12)
+            ft.Row([delay_min_input, ft.Text(
+                "-", color=COLORS["text_main"]), delay_max_input]),
+            ft.Text("Random wait time between posts (seconds)",
+                    color=COLORS["text_muted"], size=12)
         ], tight=True),
         actions=[
-            ft.TextButton("Cancel", style=ft.ButtonStyle(color=COLORS["text_muted"])),
+            ft.TextButton("Cancel", style=ft.ButtonStyle(
+                color=COLORS["text_muted"])),
             ft.TextButton("Save", style=ft.ButtonStyle(color=COLORS["accent"]))
         ]
     )
