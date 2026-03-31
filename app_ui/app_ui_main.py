@@ -1603,7 +1603,8 @@ class AppUI:
             if update_info.get("has_update"):
                 self.page.snack_bar = ft.SnackBar(
                     ft.Text(f"✨ Update v{update_info['version']} available!"),
-                    action="Update"
+                    action="Update",
+                    on_action=lambda e: self._show_update_dialog(update_info)
                 )
                 self.page.snack_bar.open = True
                 self.update_status_text.value = f"Update available: v{update_info['version']}"

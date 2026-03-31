@@ -16,7 +16,7 @@ from pathlib import Path
 from logger_config import log_debug, log_info, log_error
 
 # App Version
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.3.2"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
