@@ -11,9 +11,6 @@ Auto-posting bot for Facebook groups with stealth mode to avoid account restrict
 - ✅ **Stealth Mode** - Tránh khóa tài khoản, bypass anti-bot
 - ✅ **Image/Video** - Hỗ trợ ảnh và video
 - ✅ **History** - Lưu lịch sử đăng bài
-- ✅ **Config-Driven** - Cấu hình dễ dàng (config.yaml)
-- ✅ **Modular Code** - Kiến trúc sạch, dễ extend
-- ✅ **46 Tests** - 100% test coverage
 
 ## 🚀 Quick Start
 
