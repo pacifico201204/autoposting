@@ -1,9 +1,11 @@
 """
-Logger configuration cho Vibecode Auto
+Logger configuration cho Auto Posting
 Lưu logs vào file + console cùng lúc
+Tự động rotate logs khi quá lớn
 """
 
 import logging
+import logging.handlers
 import os
 from datetime import datetime
 
@@ -19,12 +21,11 @@ except Exception as e:
     print(f"⚠️ Warning: Error with logs directory: {e}")
     LOG_DIR = "."  # Fallback to current directory
 
-# Tạo filename với timestamp
-log_filename = os.path.join(
-    LOG_DIR, f"vibecode_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+# Use fixed filename for effective log rotation
+log_filename = os.path.join(LOG_DIR, "autoposting.log")
 
 # Cấu hình logger
-logger = logging.getLogger("vibecode_auto")
+logger = logging.getLogger("autoposting_app")
 logger.setLevel(logging.DEBUG)
 
 # Format cho logs
@@ -33,9 +34,15 @@ log_format = logging.Formatter(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-# Handler ghi file (DEBUG level)
+# Handler ghi file với rotation (DEBUG level)
+# RotatingFileHandler: max 5MB per file, keep 5 backups (25MB total)
 try:
-    file_handler = logging.FileHandler(log_filename, encoding='utf-8')
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_filename,
+        maxBytes=5 * 1024 * 1024,  # 5MB
+        backupCount=5,  # Keep 5 backups
+        encoding='utf-8'
+    )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(log_format)
     logger.addHandler(file_handler)

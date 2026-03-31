@@ -15,6 +15,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
+from logger_config import log_info, log_error, log_warning, log_debug
 
 
 # Configuration
@@ -27,103 +28,104 @@ class BackupManager:
     """
     Manage data backups - Create, restore, validate
     """
-    
+
     def __init__(self, data_file: str = DATA_FILE, backup_dir: str = BACKUP_DIR):
         self.data_file = data_file
         self.backup_dir = backup_dir
         self._ensure_backup_dir()
-    
+
     def _ensure_backup_dir(self):
         """Create backup directory if it doesn't exist"""
         if not os.path.exists(self.backup_dir):
             os.makedirs(self.backup_dir)
-            print(f"✅ Created backup directory: {self.backup_dir}")
-    
+            log_info(f"✅ Created backup directory: {self.backup_dir}")
+
     def create_backup(self, data: Any, label: str = "") -> Tuple[bool, str]:
         """
         Create a backup of data
-        
+
         Args:
             data: Data to backup
             label: Optional label (e.g., "manual", "auto", "pre-deletion")
-            
+
         Returns:
             (success: bool, backup_path: str)
         """
         try:
             self._ensure_backup_dir()
-            
+
             # Generate backup filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             label_str = f"_{label}" if label else ""
             backup_filename = f"backup_{timestamp}{label_str}.json"
             backup_path = os.path.join(self.backup_dir, backup_filename)
-            
+
             # Write backup
             with open(backup_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
-            
+
             # Rotate old backups
             self._rotate_backups()
-            
-            print(f"✅ Backup created: {backup_path}")
+
+            log_info(f"✅ Backup created: {backup_path}")
             return True, backup_path
-            
+
         except Exception as e:
-            print(f"❌ Backup failed: {e}")
+            log_error(f"❌ Backup failed: {e}")
             return False, ""
-    
+
     def restore_backup(self, backup_path: str) -> Tuple[bool, Any]:
         """
         Restore data from backup
-        
+
         Args:
             backup_path: Path to backup file
-            
+
         Returns:
             (success: bool, data: Any)
         """
         try:
             if not os.path.exists(backup_path):
-                print(f"❌ Backup not found: {backup_path}")
+                log_error(f"❌ Backup not found: {backup_path}")
                 return False, None
-            
+
             with open(backup_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
-            print(f"✅ Backup restored: {backup_path}")
+
+            log_info(f"✅ Backup restored: {backup_path}")
             return True, data
-            
+
         except Exception as e:
-            print(f"❌ Restore failed: {e}")
+            log_error(f"❌ Restore failed: {e}")
             return False, None
-    
+
     def get_latest_backup(self) -> Optional[str]:
         """Get path to latest backup"""
         try:
             backup_files = sorted(
-                [f for f in os.listdir(self.backup_dir) if f.startswith("backup_")],
+                [f for f in os.listdir(self.backup_dir)
+                 if f.startswith("backup_")],
                 reverse=True
             )
             if backup_files:
                 return os.path.join(self.backup_dir, backup_files[0])
         except Exception as e:
-            print(f"❌ Error finding backups: {e}")
-        return None
-    
+            log_error(f"❌ Error finding backups: {e}")
+
     def list_backups(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
         List available backups
-        
+
         Returns:
             List of backup info dicts
         """
         try:
             backup_files = sorted(
-                [f for f in os.listdir(self.backup_dir) if f.startswith("backup_")],
+                [f for f in os.listdir(self.backup_dir)
+                 if f.startswith("backup_")],
                 reverse=True
             )[:limit]
-            
+
             backups = []
             for backup_file in backup_files:
                 backup_path = os.path.join(self.backup_dir, backup_file)
@@ -134,52 +136,53 @@ class BackupManager:
                     "size": stat.st_size,
                     "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 })
-            
+
             return backups
-            
+
         except Exception as e:
-            print(f"❌ Error listing backups: {e}")
+            log_error(f"❌ Error listing backups: {e}")
             return []
-    
+
     def _rotate_backups(self):
         """Remove old backups, keep only last N"""
         try:
             backup_files = sorted(
-                [f for f in os.listdir(self.backup_dir) if f.startswith("backup_")],
+                [f for f in os.listdir(self.backup_dir)
+                 if f.startswith("backup_")],
                 reverse=True
             )
-            
+
             # Remove old backups
             for old_backup in backup_files[BACKUP_RETENTION:]:
                 old_path = os.path.join(self.backup_dir, old_backup)
                 os.remove(old_path)
-                print(f"🗑️  Removed old backup: {old_backup}")
-                
+                log_debug(f"🗑️  Removed old backup: {old_backup}")
+
         except Exception as e:
-            print(f"⚠️  Warning during backup rotation: {e}")
-    
+            log_warning(f"⚠️  Warning during backup rotation: {e}")
+
     def validate_backup(self, backup_path: str) -> Tuple[bool, str]:
         """
         Validate backup file integrity
-        
+
         Returns:
             (is_valid: bool, message: str)
         """
         try:
             if not os.path.exists(backup_path):
                 return False, f"❌ File not found: {backup_path}"
-            
+
             # Try to load JSON
             with open(backup_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
+
             # Check if it's a list (groups data)
             if not isinstance(data, list):
                 return False, f"❌ Invalid backup format (expected list, got {type(data).__name__})"
-            
+
             size_mb = os.path.getsize(backup_path) / (1024 * 1024)
             return True, f"✅ Valid backup ({len(data)} groups, {size_mb:.2f} MB)"
-            
+
         except json.JSONDecodeError as e:
             return False, f"❌ Invalid JSON: {e}"
         except Exception as e:
@@ -190,15 +193,15 @@ class SafeStorage:
     """
     Safe storage wrapper - Always create backup before write
     """
-    
+
     def __init__(self, data_file: str = DATA_FILE, backup_dir: str = BACKUP_DIR):
         self.data_file = data_file
         self.backup_manager = BackupManager(data_file, backup_dir)
-    
+
     def load_groups(self) -> List[Dict[str, Any]]:
         """
         Load groups from file, recover from backup if corrupted
-        
+
         Returns:
             List of groups
         """
@@ -207,61 +210,64 @@ class SafeStorage:
             try:
                 with open(self.data_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                
+
                 if isinstance(data, list):
-                    print(f"✅ Loaded {len(data)} groups from {self.data_file}")
+                    log_info(
+                        f"✅ Loaded {len(data)} groups from {self.data_file}")
                     return data
             except json.JSONDecodeError as e:
-                print(f"⚠️  Main file corrupted: {e}")
-        
+                log_warning(f"⚠️  Main file corrupted: {e}")
+
         # Try to recover from latest backup
         latest_backup = self.backup_manager.get_latest_backup()
         if latest_backup:
             success, data = self.backup_manager.restore_backup(latest_backup)
             if success:
-                print(f"⚠️  Recovered from backup: {latest_backup}")
+                log_warning(f"⚠️  Recovered from backup: {latest_backup}")
                 return data
-        
+
         # No recovery possible
-        print("⚠️  No data found, returning empty list")
+        log_warning("⚠️  No data found, returning empty list")
         return []
-    
+
     def save_groups(self, data: List[Dict[str, Any]], label: str = "auto") -> bool:
         """
         Save groups with automatic backup
-        
+
         Args:
             data: Groups to save
             label: Backup label (e.g., "auto", "manual", "pre-deletion")
-            
+
         Returns:
             Success status
         """
         try:
             # Create backup BEFORE write
-            success, backup_path = self.backup_manager.create_backup(data, label=label)
+            success, backup_path = self.backup_manager.create_backup(
+                data, label=label)
             if not success:
-                print("⚠️  Backup failed, but continuing with write...")
-            
+                log_warning("⚠️  Backup failed, but continuing with write...")
+
             # Write main file
             with open(self.data_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
-            
-            print(f"✅ Saved {len(data)} groups to {self.data_file}")
+
+            log_info(f"✅ Saved {len(data)} groups to {self.data_file}")
             return True
-            
+
         except Exception as e:
-            print(f"❌ Save failed: {e}")
-            print(f"⚠️  Data may be lost! Latest backup: {self.backup_manager.get_latest_backup()}")
+            log_error(f"❌ Save failed: {e}")
+            log_error(
+                f"⚠️  Data may be lost! Latest backup: {self.backup_manager.get_latest_backup()}")
             return False
-    
+
     def add_group(self, group_data: Dict[str, Any]) -> bool:
         """
         Add new group with backup
-        
+
         Args:
             group_data: Group to add
-            
+
         Returns:
             Success status
         """
@@ -270,31 +276,31 @@ class SafeStorage:
             groups.append(group_data)
             return self.save_groups(groups, label="add_group")
         except Exception as e:
-            print(f"❌ Add group failed: {e}")
+            log_error(f"❌ Add group failed: {e}")
             return False
-    
+
     def delete_group(self, group_id: str) -> bool:
         """
         Delete group with backup (before deletion)
-        
+
         Args:
             group_id: ID of group to delete
-            
+
         Returns:
             Success status
         """
         try:
             groups = self.load_groups()
-            
+
             # Backup BEFORE deletion
             self.backup_manager.create_backup(groups, label="pre_deletion")
-            
+
             # Remove group
             groups = [g for g in groups if g.get("id") != group_id]
-            
+
             return self.save_groups(groups, label="delete_group")
         except Exception as e:
-            print(f"❌ Delete group failed: {e}")
+            log_error(f"❌ Delete group failed: {e}")
             return False
 
 
@@ -338,10 +344,10 @@ def list_backups() -> List[Dict[str, Any]]:
 def restore_from_backup(backup_path: str) -> Tuple[bool, List[Dict[str, Any]]]:
     """
     Restore groups from backup file
-    
+
     Args:
         backup_path: Path to backup file
-        
+
     Returns:
         (success: bool, groups: list)
     """
@@ -352,10 +358,10 @@ def restore_from_backup(backup_path: str) -> Tuple[bool, List[Dict[str, Any]]]:
 def validate_backup_file(backup_path: str) -> Tuple[bool, str]:
     """
     Validate backup file
-    
+
     Args:
         backup_path: Path to backup file
-        
+
     Returns:
         (is_valid: bool, message: str)
     """

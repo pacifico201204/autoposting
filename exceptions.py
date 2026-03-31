@@ -1,20 +1,20 @@
 """
-Custom Exceptions for Vibecode Auto
+Custom Exceptions for Auto Posting
 Định nghĩa các exception riêng để xử lý lỗi cụ thể
 """
 
 
-class VibecodeException(Exception):
-    """Base exception for all Vibecode errors"""
+class AutoPostingException(Exception):
+    """Base exception for all Auto Posting errors"""
     pass
 
 
-class FacebookDetectionException(VibecodeException):
+class FacebookDetectionException(AutoPostingException):
     """Raised when Facebook might be detecting bot activity"""
     pass
 
 
-class BrowserContextException(VibecodeException):
+class BrowserContextException(AutoPostingException):
     """Raised when browser context has issues"""
     pass
 
@@ -29,12 +29,12 @@ class PlaywrightException(BrowserContextException):
     pass
 
 
-class ElementNotFoundException(VibecodeException):
+class ElementNotFoundException(AutoPostingException):
     """Raised when expected element is not found"""
     pass
 
 
-class LoginRequiredException(VibecodeException):
+class LoginRequiredException(AutoPostingException):
     """Raised when login is required"""
     pass
 
@@ -44,6 +44,6 @@ class TooManyPostsException(FacebookDetectionException):
     pass
 
 
-class ValidationException(VibecodeException):
+class ValidationException(AutoPostingException):
     """Raised when input validation fails"""
     pass

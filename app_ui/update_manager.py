@@ -13,9 +13,10 @@ import zipfile
 import requests
 from datetime import datetime
 from pathlib import Path
+from logger_config import log_debug, log_info, log_error
 
 # App Version
-APP_VERSION = "1.2"
+APP_VERSION = "1.3.1"
 GITHUB_REPO = "pacifico201204/autoposting"
 BACKUP_FOLDER = "app_backups"
 
@@ -24,7 +25,11 @@ class UpdateManager:
     def __init__(self):
         self.current_version = APP_VERSION
         self.backup_folder = Path(BACKUP_FOLDER)
-        self.backup_folder.mkdir(exist_ok=True)
+        try:
+            self.backup_folder.mkdir(exist_ok=True)
+        except Exception as e:
+            log_error(f"Failed to create backup folder: {e}")
+            # Continue anyway, backup just won't work
         self.app_folder = Path(
             "dist/AutoPostingTool") if os.path.exists("dist/AutoPostingTool") else Path(".")
 
@@ -232,5 +237,6 @@ class UpdateManager:
                 return -1
             else:
                 return 0
-        except:
+        except Exception as e:
+            log_debug(f"Version comparison error: {str(e)}")
             return 0

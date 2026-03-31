@@ -75,8 +75,8 @@ class LogManager:
            (not is_technical and self.current_log_view == "user"):
             try:
                 self.app_ui.page.update()
-            except:
-                pass
+            except Exception as e:
+                log_debug(f"Failed to update log view: {str(e)}")
 
     def log_msg_with_ref(self, msg, color="#FFA500", is_technical=False):
         """Tạo một log và trả về reference để dễ cập nhật"""
@@ -102,8 +102,8 @@ class LogManager:
            (not is_technical and self.current_log_view == "user"):
             try:
                 self.app_ui.page.update()
-            except:
-                pass
+            except Exception as e:
+                log_debug(f"Failed to update log_msg_with_ref view: {str(e)}")
 
         return log_item
 
@@ -111,15 +111,15 @@ class LogManager:
         """Hiển thị thông báo (SnackBar) góc dưới màn hình - cải thiện UI"""
         if color is None:
             color = self.colors.get("bg_card", "#242526")
-        
+
         # Determine text color based on background
-        text_color = "white" if color in [self.colors.get("error"), self.colors.get("success"), self.colors.get("warning"), "#FF9800"] else "#000"
+        text_color = "white" if color in [self.colors.get("error"), self.colors.get(
+            "success"), self.colors.get("warning"), "#FF9800"] else "#000"
 
         self.app_ui.page.overlay.append(
             ft.SnackBar(
                 ft.Text(message, color=text_color, size=14, weight="w500"),
                 bgcolor=color,
-                bgcolor_opacity=0.95,
                 duration=3000,
                 open=True
             )
@@ -160,12 +160,12 @@ class LogManager:
         """Export logs thành file .txt"""
         # Tạo tên file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        export_filename = f"logs/vibecode_export_{timestamp}.txt"
+        export_filename = f"logs/autposting_export_{timestamp}.txt"
 
         # Collect logs từ cả 2 views
         lines = []
         lines.append(
-            f"=== VIBECODE AUTO LOGS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+            f"=== AUTO POSTING LOGS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
         lines.append(
             f"Total User Messages: {len(self.log_list_user.controls)}")
         lines.append(

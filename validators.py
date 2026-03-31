@@ -1,12 +1,14 @@
 """
-Validators Module - Input validation for Vibecode Auto
-Validate URLs, group names, post content, etc.
+Validators Module - Input validation for Auto Posting
+Validate URLs, group names, post content, image files, and Facebook account status
 """
 
 import re
+import os
+import json
 from urllib.parse import urlparse
 from pathlib import Path
-import os
+from logger_config import log_warning, log_info
 
 
 class ValidationError(Exception):
@@ -150,3 +152,139 @@ class Validators:
         if max_val > 3600:  # 1 hour max
             raise ValidationError(
                 "Max delay cannot exceed 3600 seconds (1 hour)")
+
+    @staticmethod
+    def check_facebook_login_status(browser_profile_path: str = None) -> bool:
+        """
+        ⚠️ NOT RECOMMENDED - For reference only, do not use in production flow
+
+        Check if Facebook account is logged in via browser cookies
+
+        LIMITATION: This function cannot reliably check cookies while browser is running
+        because Chrome/Edge locks the database file. Returns False while browser is open.
+
+        Args:
+            browser_profile_path: Path to browser profile (Chromium or similar)
+                                 If None, tries common paths
+
+        Returns:
+            True if Facebook login cookies found, False otherwise
+
+        Note: 
+            - Only works when browser is fully closed
+            - Chrome/Edge locks Cookies database while running
+            - Not suitable for real-time validation during posting
+        """
+        try:
+            # Common browser profile paths
+            if browser_profile_path is None:
+                browser_profile_path = os.path.expanduser(
+                    "~/.config/google-chrome/Default"  # Linux
+                )
+
+                # Windows Chrome path
+                if not os.path.exists(browser_profile_path):
+                    browser_profile_path = os.path.expanduser(
+                        "~\\AppData\\Local\\Google\\Chrome\\User Data\\Default"
+                    )
+
+                # Windows Edge path
+                if not os.path.exists(browser_profile_path):
+                    browser_profile_path = os.path.expanduser(
+                        "~\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default"
+                    )
+
+            if not os.path.exists(browser_profile_path):
+                log_warning(
+                    f"Browser profile not found at: {browser_profile_path}")
+                return False
+
+            # Check for cookies file
+            cookies_path = os.path.join(browser_profile_path, "Cookies")
+            if not os.path.exists(cookies_path):
+                log_warning(f"Cookies file not found")
+                return False
+
+            # Try to read cookies (SQLite database)
+            # ⚠️ WILL FAIL if browser is running (database locked)
+            try:
+                file_size = os.path.getsize(cookies_path)
+                if file_size > 0:
+                    log_info(f"✅ Browser cookies found ({file_size} bytes)")
+                    return True
+            except PermissionError:
+                # Expected when browser is running
+                log_warning(
+                    "⚠️ Cannot access cookies while browser is running (database locked)")
+                return False
+
+            return False
+
+        except Exception as e:
+            log_warning(f"Error checking Facebook login status: {e}")
+            return False
+
+    @staticmethod
+    def validate_facebook_url_enhanced(url: str) -> dict:
+        """
+        Enhanced Facebook group URL validation
+
+        Args:
+            url: Facebook group URL to validate
+
+        Returns:
+            dict with validation result and extracted group info
+            Example: {
+                "valid": True,
+                "group_id": "123456789",
+                "group_url": "https://facebook.com/groups/123456789",
+                "message": "URL is valid"
+            }
+
+        Raises:
+            ValidationError: If URL is invalid
+        """
+        if not url:
+            raise ValidationError("URL is required")
+
+        # Add https:// if missing
+        if not url.startswith("http"):
+            url = "https://" + url
+
+        # Parse URL
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            raise ValidationError("Invalid URL format")
+
+        # Check domain is Facebook
+        if "facebook.com" not in parsed.netloc:
+            raise ValidationError("Must be a Facebook.com URL")
+
+        # Check if it's a group URL
+        if "/groups/" not in parsed.path:
+            raise ValidationError("Must be a Facebook group URL (/groups/...)")
+
+        # Extract group ID from path
+        # Path format: /groups/{group_id}/ or /groups/{group_id}
+        path_parts = parsed.path.split('/')
+        group_id = None
+
+        try:
+            groups_idx = path_parts.index('groups')
+            if groups_idx + 1 < len(path_parts):
+                group_id = path_parts[groups_idx + 1].strip('/')
+
+                # Validate group ID is numeric or alphanumeric
+                if not group_id:
+                    raise ValidationError(
+                        "Could not extract group ID from URL")
+        except (ValueError, IndexError):
+            raise ValidationError("Invalid group URL format")
+
+        return {
+            "valid": True,
+            "group_id": group_id,
+            "group_url": url,
+            "message": f"✅ Valid Facebook group URL (ID: {group_id})"
+        }

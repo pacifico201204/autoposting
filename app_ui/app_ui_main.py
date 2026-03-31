@@ -4,14 +4,19 @@ from validators import Validators, ValidationError
 from ui_messages import get_message, get_message_color
 from dynamic_selector import DynamicSelector
 from logger_config import log_debug, log_info, log_warning, log_error, log_exception
+from recovery_manager import recovery_manager
+from retry_logic import retry_async
+from posting_engine import PostingEngine
 from playwright.async_api import async_playwright
 from storage import load_groups, save_groups
 from app_ui.ui_history import HistoryManager
 from app_ui.ui_logging import LogManager
 from app_ui.update_manager import UpdateManager, APP_VERSION
+from app_ui.settings_manager import SettingsManager
 import urllib.parse
 import flet as ft
 import os
+import sys
 import asyncio
 import threading
 import json
@@ -25,24 +30,37 @@ from playwright_stealth import Stealth
 import nest_asyncio
 nest_asyncio.apply()
 
+from thread_safety import get_auto_runner, get_modification_guard
+auto_runner = get_auto_runner()
+mod_guard = get_modification_guard()
+
+# Get base path for bundled resources (PyInstaller or development)
+
+
+from utils import get_resource_path
+
 # Load configuration from config.yaml
 
 
 def load_config(config_file="config.yaml"):
     """Load configuration from YAML file"""
     try:
-        if os.path.exists(config_file):
+        config_path = get_resource_path(config_file)
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f)
+        # Fall back to current directory if resource path doesn't work
+        elif os.path.exists(config_file):
             with open(config_file, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f)
     except Exception as e:
-        print(f"Error loading config: {e}")
+        log_error(f"Error loading config: {e}")
 
     # Return default config if file not found
     return {
         "window": {"width": 1400, "height": 850},
         "delays": {"post_min": 5, "post_max": 10},
-        "logging": {"history_file": "history.json", "max_history_items": 100},
-        "ui": {"font_family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"}
+        "detection": {"max_posts_per_session": 10, "max_posts_per_day": 25}
     }
 
 
@@ -83,7 +101,7 @@ class AppUI:
         self.colors = COLORS  # Store colors for helper classes
         self.groups_data = load_groups()
         self.image_paths = []  # Danh sách ảnh chờ đăng
-        self.is_running = False
+        # self.is_running is now managed by thread_safety module
 
         # Load delays from config
         delays_config = CONFIG.get("delays", {})
@@ -100,6 +118,8 @@ class AppUI:
         self.history_manager = HistoryManager(self)
         self.log_manager = LogManager(self)
         self.update_manager = UpdateManager()
+        self.settings_manager = SettingsManager()
+        self.settings_manager.app_ui = self  # Pass reference for callbacks
 
         # Update UI elements (will be set in build_ui)
         self.version_text = None
@@ -116,10 +136,19 @@ class AppUI:
         # Show "Bot ready" message after initialization
         self.log_msg(get_message("bot_ready"), color=COLORS["accent"])
 
+        # Check for recovery state from previous crash
+        self._check_recovery_on_startup()
+
     def setup_page(self):
         """Cấu hình cửa sổ Flet App"""
         self.page.title = "Auto Posting"
-        self.page.window.icon = "icon.ico"  # Set window icon
+        # Set window icon with correct path for both development and PyInstaller bundle
+        icon_path = get_resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.page.window.icon = icon_path
+            log_debug(f"Window icon loaded: {icon_path}")
+        else:
+            log_warning(f"Icon file not found at: {icon_path}")
         # Changed enum to string "dark" (already handled by Flet theme correctly but just in case)
         self.page.theme_mode = "dark"
         self.page.bgcolor = COLORS["bg_main"]
@@ -132,6 +161,14 @@ class AppUI:
         window_config = CONFIG.get("window", {})
         self.page.window.width = window_config.get("width", 1400)
         self.page.window.height = window_config.get("height", 850)
+
+        # Set minimum window size to prevent UI overflow when resizing
+        # These values ensure all UI elements remain visible and usable
+        self.page.window.min_width = 1200
+        self.page.window.min_height = 700
+
+        log_info(f"Window size: {self.page.window.width}x{self.page.window.height}, "
+                 f"Min size: {self.page.window.min_width}x{self.page.window.min_height}")
 
         # Bắt sự kiện thả file vào trang
         self.page.on_drop = self.on_file_drop
@@ -199,8 +236,8 @@ class AppUI:
         """Xây dựng và Lắp ráp Giao diện UI: LAYOUT 3 CỘT FACEBOOK NIGHT MODE"""
 
         # --- HEADER (Thanh điều hướng trên cùng giả lập Facebook) ---
-        header = ft.Container(
-            content=ft.Row([
+        header_content = [
+            ft.Row([
                 ft.Row([
                     ft.Icon(ft.Icons.FACEBOOK,
                             color=COLORS["accent"], size=40),
@@ -209,7 +246,26 @@ class AppUI:
                 ], spacing=10),
                 ft.Container(expand=True),  # Khoảng trống giữa
                 # Đã bỏ các icon ở góc phải theo yêu cầu
-            ], alignment="spaceBetween", vertical_alignment="center"),
+            ], alignment="spaceBetween", vertical_alignment="center")
+        ]
+
+        # Add dry run warning banner if enabled
+        if CONFIG.get("app", {}).get("dry_run", False):
+            header_content.append(
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.WARNING, color="white", size=20),
+                        ft.Text("🧪 DRY RUN MODE - Không sẽ đăng bài thực tế",
+                                color="white", size=14, weight="bold")
+                    ], spacing=10, vertical_alignment="center"),
+                    bgcolor="#FF9800",
+                    padding=10,
+                    border_radius=6
+                )
+            )
+
+        header = ft.Container(
+            content=ft.Column(header_content, spacing=8),
             padding=ft.padding.symmetric(horizontal=20, vertical=10),
             bgcolor=COLORS["bg_card"],
             border=ft.Border(bottom=ft.BorderSide(1, COLORS["border"]))
@@ -224,10 +280,10 @@ class AppUI:
             ft.Divider(color=COLORS["border"]),
             self.make_menu_item(ft.Icons.GROUP_ADD, "Add Group",
                                 COLORS["success"], self.open_add_group_dialog),
-            self.make_menu_item(ft.Icons.SETTINGS, "Delay",
-                                COLORS["text_main"], self.open_settings_dialog),
             self.make_menu_item(ft.Icons.HISTORY, "History",
                                 COLORS["text_main"], self.toggle_history_view),
+            self.make_menu_item(ft.Icons.SETTINGS, "Settings",
+                                COLORS["text_main"], self.toggle_settings_view),
             self.make_menu_item(ft.Icons.SYSTEM_UPDATE, "Check Update",
                                 COLORS["accent"], self.manual_check_updates),
         ], spacing=5)
@@ -338,10 +394,33 @@ class AppUI:
             self.history_list_view
         ], expand=True, visible=False)
 
+        # ================= SETTINGS TAB =================
+        btn_back_settings = ft.IconButton(
+            ft.Icons.ARROW_BACK,
+            icon_color=COLORS["text_main"],
+            on_click=self.toggle_settings_view
+        )
+
+        settings_header = ft.Row([
+            ft.Text("Settings", size=20, weight="bold",
+                    color=COLORS["text_main"]),
+            ft.Container(expand=True),  # Spacer
+            btn_back_settings
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment="center")
+
+        settings_content = self.settings_manager.build_settings_ui(COLORS)
+
+        self.settings_col = ft.Column([
+            settings_header,
+            ft.Divider(color=COLORS["border"]),
+            settings_content
+        ], expand=True, visible=False)
+
         col_center = ft.Container(
             content=ft.Stack([
                 self.post_compose_col,
-                self.post_history_col
+                self.post_history_col,
+                self.settings_col
             ], expand=True),
             padding=ft.padding.only(top=20, left=10, right=10, bottom=20),
             expand=5
@@ -561,6 +640,15 @@ class AppUI:
         is_history_visible = not self.post_history_col.visible
         self.post_history_col.visible = is_history_visible
         self.post_compose_col.visible = not is_history_visible
+        self.settings_col.visible = False
+        self.page.update()
+
+    def toggle_settings_view(self, e):
+        """Chuyển đổi qua lại giữa màn hình Soạn bài và SettingsSettings"""
+        is_settings_visible = not self.settings_col.visible
+        self.settings_col.visible = is_settings_visible
+        self.post_compose_col.visible = not is_settings_visible
+        self.post_history_col.visible = False
         self.page.update()
 
     def add_to_history(self, job_data):
@@ -820,15 +908,12 @@ class AppUI:
         return log_item
 
     def show_snack(self, message, color=COLORS["bg_card"]):
-        """Hiển thị thông báo (SnackBar) góc dưới màn hình - cải thiện UI"""
-        # Determine text color based on background brightness
-        text_color = "white" if color in [COLORS["error"], COLORS["success"], COLORS["warning"], "#FF9800"] else "#000"
-        
+        """Hiển thị thông báo (SnackBar) góc dưới màn hình"""
+        # Always use white text for better visibility on any background
         self.page.overlay.append(
             ft.SnackBar(
-                ft.Text(message, color=text_color, size=14, weight="w500"),
+                ft.Text(message, color="white", size=14, weight="w500"),
                 bgcolor=color,
-                bgcolor_opacity=0.95,
                 duration=3000,
                 open=True
             )
@@ -948,8 +1033,9 @@ class AppUI:
                         fit="cover",
                         border_radius=6
                     )
-                except:
+                except Exception as e:
                     # Fallback if image fails to load
+                    log_debug(f"Failed to load image thumbnail: {str(e)}")
                     thumbnail = ft.Container(
                         content=ft.Icon(
                             ft.Icons.IMAGE, color=COLORS["text_muted"], size=35),
@@ -1238,11 +1324,10 @@ class AppUI:
         return [g for g in self.groups_data if g.get("selected")]
 
     def start_auto(self, e):
-        import traceback
         import threading
 
-        if self.is_running:
-            self.show_snack("Auto is already running!",
+        if auto_runner.is_running():
+            self.show_snack("Auto is đã đang chạy!",
                             color=COLORS["warning"])
             return
 
@@ -1252,7 +1337,21 @@ class AppUI:
                             color=COLORS["error"])
             return
 
-        self.is_running = True
+        # Validate: must have at least text or images
+        post_content = self.text_content.value.strip() if self.text_content.value else ""
+        has_content = bool(post_content)
+        has_images = len(self.image_paths) > 0
+
+        if not has_content and not has_images:
+            self.show_snack("Vui lòng nhập nội dung hoặc thêm ảnh!",
+                            color=COLORS["error"])
+            self.log_msg("❌ Không có nội dung và không có ảnh. Vui lòng nhập nội dung hoặc thêm ảnh trước khi đăng.",
+                         color=COLORS["error"])
+            return
+
+        # Use runner and guard
+        auto_runner.can_start()  # Mark as running
+        mod_guard.set_automation_running(True)
 
         self.log_msg("✓ Auto started. Opening browser...",
                      color=COLORS["success"])
@@ -1265,560 +1364,228 @@ class AppUI:
         thread.start()
 
     def _run_auto_thread(self, selected_groups):
-        """Run auto in background thread"""
+        """Run auto in background thread using PostingEngine"""
         import asyncio
         try:
             # Create new event loop for this thread
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(self.run_facebook_auto(selected_groups))
+            engine = PostingEngine(self)
+            loop.run_until_complete(engine.run_facebook_auto(selected_groups))
         except Exception as ex:
             self.log_msg(
                 f"❌ Auto error: {str(ex)[:100]}", color=COLORS["error"])
-            self.is_running = False
+            auto_runner.mark_finished()
+            mod_guard.set_automation_running(False)
         finally:
             loop.close()
 
-    async def start_auto_clicked(self, e):
-        # Hàm dự phòng cho code cũ
-        self.start_auto(e)
-
     def stop_auto(self, e):
-        self.is_running = False
+        auto_runner.stop()
+        mod_guard.set_automation_running(False)
         self.log_msg("Stopping auto...", color=COLORS["warning"])
-        self.show_snack("Stopping auto. Please wait...", color=COLORS["warning"])
+        self.show_snack("Stopping auto. Please wait...",
+                        color=COLORS["warning"])
 
-    async def run_facebook_auto(self, selected_groups):
-        import random
-        # Bắt đầu vòng đời không phụ thuộc vào object nào (Keep Alive Browser)
-        playwright_instance = getattr(self, "pw_instance", None)
-        browser_context = getattr(self, "pw_context", None)
+    # NOTE: run_facebook_auto() has been moved to posting_engine.py (PostingEngine class)
+    # This keeps AppUI focused on UI concerns while PostingEngine handles automation.
 
-        # Theo dõi job
-        job_id = len(self.history_list_view.controls) + 1
-        current_time = datetime.now().strftime("%H:%M:%S")
-        post_content = self.text_content.value.strip()
-        thumb_img = self.image_paths[0] if self.image_paths else None
-        target_group_names = [g.get("name", "Unknown")
-                              for g in selected_groups]
+    # === RECOVERY RESUME FEATURE ===
 
-        job_data = {
-            "id": job_id,
-            "time": current_time,
-            "content": post_content if post_content else "(Chỉ đăng ảnh)",
-            "thumbnail": thumb_img,
-            "groups": target_group_names,
-            "status": "Running"
-        }
-        self.add_to_history(job_data)
-        final_status = "Success"
-
-        # Hàm Helper "Siêu bền" xử lý Context Destroyed cho mọi action
-        async def safe_action(action_func, log_prefix="Hành động"):
-            for retry in range(3):
-                if not self.is_running:
-                    return False
-
-                # Check if page is still valid before each retry
-                try:
-                    if page_pw.is_closed():
-                        self.log_msg(f"{log_prefix}: Page đã đóng, không thể tiếp tục.",
-                                     color=COLORS["error"], is_technical=True)
-                        return False
-                except Exception:
-                    pass
-
-                try:
-                    await action_func()
-                    self.log_msg(f"{log_prefix} thành công!",
-                                 color=COLORS["success"], is_technical=True)
-                    return True
-                except Exception as e:
-                    error_str = str(e)
-                    # Check for context destroyed errors specifically
-                    if "context" in error_str.lower() and "destroyed" in error_str.lower():
-                        self.log_msg(
-                            f"{log_prefix}: Lỗi context bị destroy: {error_str[:50]}...", color=COLORS["error"], is_technical=True)
-                        return False
-                    else:
-                        self.log_msg(
-                            f"Lỗi {log_prefix} (Thử lại {retry+1}/3): {error_str[:50]}...", color=COLORS["error"], is_technical=True)
-
-                    if retry < 2:  # Don't sleep after last retry
-                        await asyncio.sleep(2)
-            return False
-
+    def _check_recovery_on_startup(self):
+        """Check for recovery state on app startup and show resume dialog if found"""
         try:
-            self.log_msg("🚀 Bot đã sẵn sàng chiến đấu!",
-                         color=COLORS["accent"], is_technical=True)
+            if not recovery_manager.has_recovery_state():
+                return
 
-            if browser_context is None or playwright_instance is None:
-                self.log_msg("Đang mở trình duyệt...",
-                             color=COLORS["accent"], is_technical=True)
-                playwright_instance = await async_playwright().start()
-                self.pw_instance = playwright_instance
+            summary = recovery_manager.get_summary()
+            if not summary or summary["remaining"] == 0:
+                # No valid remaining groups, clear stale state
+                recovery_manager.clear_recovery_state()
+                return
 
-                user_data_dir = os.path.abspath(
-                    os.path.join(os.getcwd(), "fb_user_data_edge"))
-                if not os.path.exists(user_data_dir):
-                    os.makedirs(user_data_dir)
-
-                browser_context = await playwright_instance.chromium.launch_persistent_context(
-                    user_data_dir=user_data_dir,
-                    headless=False,
-                    channel="msedge",
-                    args=['--disable-blink-features=AutomationControlled']
-                )
-                self.pw_context = browser_context
-
-            # Get existing page or create a new one
-            pages = browser_context.pages
-            page_pw = pages[0] if pages else await browser_context.new_page()
-
-            # Bơm ngụy trang tàng hình (Playwright Stealth) vào trình duyệt ngay lập tức
+            # Format timestamp for display
             try:
-                stealth = Stealth()
-                await stealth.apply_stealth_async(page_pw)
-            except Exception as e:
-                print(f"Stealth error: {e}")
-
-            # Wait a bit before proceeding to Facebook
-            await asyncio.sleep(2)
-
-            # CƠ CHẾ CHỜ THÔNG MINH (SMART WAIT) TẠI TRANG CHỦ
-            try:
-                await page_pw.goto("https://www.facebook.com/")
-            except Exception as e:
-                self.log_msg(
-                    f"Lỗi khi truy cập Facebook: {str(e)[:50]}", color=COLORS["error"], is_technical=True)
-                if not self.is_running:
-                    return
-
-            try:
-                await page_pw.wait_for_selector('div[role="main"]', timeout=30000)
-            except Exception as e:
-                self.log_msg(
-                    f"⚠️ Timeout waiting for main div: {str(e)[:50]}", is_technical=True)
-
-            # Đăng ký bắt event dialog để tự động Accept cảnh báo rời trang
-            try:
-                page_pw.on(
-                    "dialog", lambda dialog: asyncio.create_task(dialog.accept()))
-            except Exception as e:
-                self.log_msg(
-                    f"Lỗi đăng ký dialog handler: {str(e)[:50]}", is_technical=True)
-
-            # Cho phép người dùng đăng nhập bằng tay nếu chưa
-            is_login_page = False
-            try:
-                # Kiểm tra URL trước, sau đó kiểm tra element (an toàn hơn)
-                is_login_page = "login" in page_pw.url
-                if not is_login_page:
-                    try:
-                        is_login_page = bool(await page_pw.query_selector("input[name='email']"))
-                    except Exception:
-                        # Context destroyed, assume not login page
-                        is_login_page = "login" in page_pw.url
+                from datetime import datetime as dt
+                ts = dt.fromisoformat(summary["timestamp"])
+                time_str = ts.strftime("%d/%m/%Y %H:%M:%S")
             except Exception:
-                is_login_page = "login" in page_pw.url
+                time_str = summary["timestamp"]
 
-            if is_login_page:
-                self.log_msg("Đang chờ người dùng đăng nhập tay... Bạn có 120 giây.",
-                             color=COLORS["error"], is_technical=True)
-                for _ in range(120):
-                    if not self.is_running:
-                        return
-                    try:
-                        still_login = "login" in page_pw.url
-                        if not still_login:
-                            try:
-                                # Safely check for login element
-                                login_elem = await page_pw.query_selector("input[name='email']")
-                                still_login = bool(login_elem)
-                            except Exception:
-                                # Context destroyed, assume logged in
-                                still_login = False
+            # Build info text
+            info_parts = []
+            info_parts.append(f"⏰ Thời gian crash: {time_str}")
+            info_parts.append(f"📊 Đã đăng: {summary['posted']}/{summary['total']} nhóm")
+            info_parts.append(f"📋 Còn lại: {summary['remaining']} nhóm chưa đăng")
+            if summary["has_content"]:
+                info_parts.append(f"📝 Có nội dung text")
+            if summary["has_images"]:
+                info_parts.append(f"🖼️ Có {summary['image_count']} ảnh")
+            if summary["failed_groups"]:
+                info_parts.append(f"❌ Nhóm lỗi: {', '.join(summary['failed_groups'][:3])}")
 
-                        if not still_login:
-                            break
-                    except Exception:
-                        # Context destroyed or page error, assume logged in
-                        break
-                    await asyncio.sleep(1)
+            info_text = "\n".join(info_parts)
 
-                try:
-                    await page_pw.wait_for_selector('div[role="main"]', timeout=60000)
-                    timestamp = datetime.now().strftime("%H:%M")
-                    self.log_msg(f"[{timestamp}] Đã nhận diện được trang chủ Facebook.",
-                                 color=COLORS["success"], is_technical=True)
-                except Exception as e:
-                    self.log_msg(
-                        f"Lỗi xác nhận sau khi đăng nhập (có thể context bị destroy): {str(e)[:50]}", color=COLORS["error"], is_technical=True)
+            # Show recovery dialog
+            self._recovery_dialog = ft.AlertDialog(
+                title=ft.Text("⚠️ Phát hiện phiên đăng bài bị gián đoạn",
+                              color=COLORS["warning"], weight="bold", size=16),
+                bgcolor=COLORS["bg_card"],
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Text(
+                            info_text,
+                            color=COLORS["text_main"],
+                            size=13,
+                        ),
+                        padding=15,
+                        bgcolor=COLORS["bg_main"],
+                        border_radius=8,
+                        border=ft.border.all(1, COLORS["border"])
+                    ),
+                    ft.Text(
+                        "Bạn có muốn tiếp tục đăng bài từ chỗ bị gián đoạn?",
+                        color=COLORS["text_muted"],
+                        size=12,
+                        italic=True
+                    )
+                ], tight=True, spacing=10),
+                actions=[
+                    ft.TextButton(
+                        "Bỏ qua",
+                        style=ft.ButtonStyle(color=COLORS["text_muted"]),
+                        on_click=self._dismiss_recovery
+                    ),
+                    ft.ElevatedButton(
+                        "Tiếp tục đăng",
+                        icon=ft.Icons.PLAY_ARROW,
+                        bgcolor=COLORS["accent"],
+                        color="white",
+                        on_click=self._resume_from_recovery
+                    )
+                ],
+                actions_alignment=ft.MainAxisAlignment.END
+            )
 
-            # Ổn định sau khi đăng nhập/lấy Newsfeed
-            timestamp = datetime.now().strftime("%H:%M")
-            self.log_msg(f"[{timestamp}] Đang ổn định hệ thống. Nghỉ 5s trước khi tương tác...",
-                         color=COLORS["text_muted"], is_technical=True)
-            await asyncio.sleep(5)
+            self.page.overlay.append(self._recovery_dialog)
+            self._recovery_dialog.open = True
+            self.page.update()
 
-            # Bắt đầu duyệt từng nhóm
-            for i, group in enumerate(selected_groups, start=1):
-                if not self.is_running:
-                    self.log_msg("ĐÃ DỪNG AUTO BỞI NGƯỜI DÙNG.")
-                    final_status = "Failed"
-                    break
-
-                group_url = group.get("url")
-                group_name = group.get("name")
-                timestamp = datetime.now().strftime("%H:%M")
-                self.log_msg(
-                    f"[{timestamp}] #{i}/{len(selected_groups)} - Đang di chuyển tới Group: {group_name}...", is_technical=True)
-
-                # 📝 Load content RIGHT AWAY at the start of each group (CRITICAL FIX)
-                content = self.text_content.value.strip()
-                self.log_msg(
-                    f"📊 Images available: {len(self.image_paths)} | Content: {len(content)} chars", color=COLORS["text_muted"], is_technical=True)
-
-                try:
-                    try:
-                        await page_pw.goto(group_url, wait_until="domcontentloaded", timeout=60000)
-                        self.log_msg(
-                            f"✓ Đã load URL nhóm thành công", is_technical=True)
-                    except Exception as e:
-                        self.log_msg(
-                            f"⚠️ Lỗi goto (context may be destroyed): {str(e)[:50]}", is_technical=True)
-                        # Retry or continue
-                        await asyncio.sleep(2)
-
-                    try:
-                        await page_pw.wait_for_selector('div[role="main"]', timeout=30000)
-                        self.log_msg(f"✓ Trang chính đã load",
-                                     is_technical=True)
-                    except Exception as e:
-                        self.log_msg(
-                            f"⚠️ Wait timeout main div: {str(e)[:50]}", is_technical=True)
-                        pass
-
-                    # 🔄 Extra wait to ensure page is fully interactive
-                    self.log_msg(f"⏳ Ổn định trang (chờ 4s)...",
-                                 color=COLORS["text_muted"], is_technical=True)
-                    await asyncio.sleep(4)
-
-                    # 🔍 Check page state before proceeding
-                    try:
-                        page_title = await page_pw.title()
-                        self.log_msg(
-                            f"📄 Page title: {page_title[:40]}...", is_technical=True)
-                    except Exception:
-                        pass
-
-                    # 🔄 For Group 2+: Ensure page is fully refreshed (clear any stale elements)
-                    if i > 1:
-                        self.log_msg(
-                            f"🔄 Refresh page state for Group {i}...", color=COLORS["text_muted"], is_technical=True)
-                        try:
-                            # Scroll to top to reset page
-                            await page_pw.keyboard.press("Home")
-                            await asyncio.sleep(1)
-                        except Exception:
-                            pass
-
-                    if not self.is_running:
-                        break
-
-                    # 1. Tìm ô "Bạn đang nghĩ gì?" - Sử dụng Dynamic Selector
-                    async def click_box():
-                        log_info(
-                            f"Tìm post input box trong nhóm: {group_name}")
-
-                        # Khởi tạo dynamic selector
-                        selector = DynamicSelector(page_pw)
-
-                        # Tìm element
-                        post_input = await selector.find_post_input_box()
-
-                        if post_input is None:
-                            log_error(
-                                f"Không tìm thấy post input box trong nhóm {group_name}")
-                            raise Exception("Post input box không tìm thấy")
-
-                        # Click vào
-                        await post_input.click()
-                        log_info(f"✓ Đã click post input box thành công")
-
-                    box_clicked = await safe_action(click_box, log_prefix="Click ô nhập bài")
-
-                    if not box_clicked:
-                        self.log_msg(
-                            f"⚠️ Nhóm này khó nhằn quá, tôi sẽ thử lại ở nhóm sau! (Không thấy ô đăng bài)", color=COLORS["error"])
-                        continue
-
-                    await asyncio.sleep(3)
-                    if not self.is_running:
-                        break
-
-                    # 2. Gõ nội dung văn bản (Gõ mù ngay vị trí con trỏ chuột)
-                    if content:
-                        async def fill_text():
-                            try:
-                                self.log_msg(
-                                    "Bắt đầu gõ nội dung (mù)...", is_technical=True)
-                                # FB tự động focus vào ô nhập liệu, ra lệnh gõ trực tiếp luôn
-                                for char in content:
-                                    # 1. Giả lập gõ sai và sửa lỗi (Tỷ lệ 5% với chữ cái)
-                                    if random.random() < 0.05 and char.isalpha():
-                                        wrong_char = random.choice(
-                                            'abcdefghijklmnopqrstuvwxyz')
-                                        try:
-                                            await page_pw.keyboard.type(wrong_char)
-                                        except Exception:
-                                            # Context may be destroyed
-                                            raise Exception(
-                                                "Context destroyed during typing")
-                                        # Khựng lại nhận ra lỗi
-                                        await asyncio.sleep(random.uniform(0.1, 0.4))
-                                        try:
-                                            # Xóa chữ sai
-                                            await page_pw.keyboard.press("Backspace")
-                                        except Exception:
-                                            raise Exception(
-                                                "Context destroyed during typing")
-                                        # Nghỉ nhịp trước khi gõ chữ đúng
-                                        await asyncio.sleep(random.uniform(0.1, 0.3))
-
-                                    # 2. Gõ chữ đúng
-                                    try:
-                                        await page_pw.keyboard.type(char)
-                                    except Exception:
-                                        raise Exception(
-                                            "Context destroyed during typing")
-                                    # Tốc độ gõ mổ cò bình thường
-                                    await asyncio.sleep(random.uniform(0.03, 0.15))
-
-                                    # 3. Giả lập dừng lại suy nghĩ (Tỷ lệ 3%)
-                                    if random.random() < 0.03:
-                                        # Dừng 1-3 giây giữa chừng
-                                        await asyncio.sleep(random.uniform(1.0, 3.0))
-                            except Exception as e:
-                                if "context" in str(e).lower():
-                                    raise Exception(
-                                        "Context destroyed during typing")
-                                raise
-
-                        await safe_action(fill_text, log_prefix="Điền nội dung")
-                        await asyncio.sleep(2)
-
-                    if not self.is_running:
-                        break
-
-                    # 3. Đăng ảnh nếu có - Sử dụng Dynamic Selector
-                    if self.image_paths:
-                        async def upload_imgs():
-                            log_info(
-                                f"Bắt đầu upload {len(self.image_paths)} ảnh")
-                            abs_image_paths = [os.path.abspath(
-                                p) for p in self.image_paths]
-
-                            self.log_msg(
-                                "Đang lướt tìm ảnh...", color=COLORS["text_muted"], is_technical=True)
-                            await asyncio.sleep(random.uniform(3.0, 6.0))
-
-                            # Sử dụng dynamic selector tìm file input
-                            selector = DynamicSelector(page_pw)
-                            input_file = await selector.find_file_input()
-
-                            # Log chi tiết file input search
-                            if input_file is None:
-                                log_error(
-                                    f"❌ LỖI: Không tìm thấy file input element trong nhóm {group_name}")
-                                self.log_msg(
-                                    f"⚠️ Chi tiết: Đã tìm file input nhưng không thấy", color=COLORS["error"], is_technical=True)
-                                raise Exception("File input không tìm thấy")
-
-                            # Log trước khi upload
-                            self.log_msg(
-                                f"📸 Uploading {len(abs_image_paths)} ảnh vào Facebook...", color=COLORS["accent"], is_technical=True)
-
-                            await input_file.set_input_files(abs_image_paths)
-                            log_info(
-                                f"✓ Đã upload {len(abs_image_paths)} ảnh thành công")
-                            self.log_msg(
-                                f"✅ Upload image thành công: {len(abs_image_paths)} ảnh", color=COLORS["success"], is_technical=True)
-
-                            self.log_msg(
-                                "Đợi Facebook xử lý ảnh...", color=COLORS["text_muted"], is_technical=True)
-                            await asyncio.sleep(random.uniform(2.0, 4.0))
-
-                        success = await safe_action(upload_imgs, log_prefix="Mở và đính kèm Upload")
-                        if success:
-                            timestamp_img = datetime.now().strftime("%H:%M")
-                            self.log_msg(
-                                f"[{timestamp_img}] Đang chờ ảnh tải lên hệ thống...", is_technical=True)
-                            await asyncio.sleep(5)
-                        else:
-                            # ❌ Upload ảnh THẤT BẠI - Skip group này để tránh post chỉ có text
-                            self.log_msg(
-                                f"❌ Nhóm {group_name}: Lỗi upload ảnh - bỏ qua nhóm này", color=COLORS["error"])
-                            continue
-
-                    if not self.is_running:
-                        break
-                    await asyncio.sleep(3)
-
-                    # 3.5 QUALITY CONTROL: Kiểm tra nội dung trước khi đăng (phải có text HOẶC ảnh)
-                    has_content = bool(content.strip()) if content else False
-                    has_images = len(self.image_paths) > 0
-
-                    if not has_content and not has_images:
-                        self.log_msg(
-                            f"⚠️ Nhóm {group_name}: Bỏ qua - không có nội dung và không có ảnh!", color=COLORS["error"])
-                        continue
-                    elif not has_content:
-                        self.log_msg(
-                            f"⚠️ Nhóm {group_name}: Chỉ đăng {len(self.image_paths)} ảnh (không có text)", color=COLORS["accent"])
-                    elif not has_images:
-                        self.log_msg(
-                            f"⚠️ Nhóm {group_name}: Chỉ đăng text (không có ảnh)", color=COLORS["accent"])
-                    else:
-                        self.log_msg(
-                            f"✓ Nhóm {group_name}: Sẽ đăng text ({len(content)} ký tự) + {len(self.image_paths)} ảnh", color=COLORS["accent"])
-
-                    # 4. Bấm chữ Đăng (Post) - Sử dụng Dynamic Selector
-                    async def click_post():
-                        try:
-                            log_info(
-                                f"Tìm và click post button trong nhóm {group_name}")
-
-                            # Thử phím tắt trước
-                            self.log_msg(
-                                "Đang thử đăng bài bằng phím tắt (Control+Enter)...", is_technical=True)
-                            try:
-                                await page_pw.keyboard.press("Control+Enter")
-                            except Exception:
-                                self.log_msg(
-                                    "Phím tắt không work, sẽ thử click nút", is_technical=True)
-                            await asyncio.sleep(2)
-
-                            # Sử dụng dynamic selector tìm nút Đăng
-                            selector = DynamicSelector(page_pw)
-                            post_button = await selector.find_post_button()
-
-                            if post_button is not None:
-                                self.log_msg(
-                                    "Thử click nút Đăng...", is_technical=True)
-                                try:
-                                    await post_button.click(timeout=5000)
-                                except Exception as e:
-                                    if "context" in str(e).lower():
-                                        raise Exception(
-                                            "Context destroyed during post click")
-                                    raise
-                                log_info("✓ Đã click post button thành công")
-                            else:
-                                log_warning(
-                                    "Không tìm thấy post button, có thể phím tắt đã work")
-                        except Exception as e:
-                            if "context" in str(e).lower():
-                                raise
-                            raise
-
-                    submit_clicked = await safe_action(click_post, log_prefix="Click Đăng Bài")
-
-                    # Cơ chế Screenshot Fallback nếu không Đăng được
-                    if not submit_clicked:
-                        self.log_msg("❌ Không thể click nút Đăng. Cần kiểm tra lại giao diện Facebook.",
-                                     color=COLORS["error"], is_technical=True)
-                        self.log_msg(
-                            f"⚠️ Nhóm này khó nhằn quá, tôi sẽ thử lại ở nhóm sau!", color=COLORS["error"])
-                        err_dir = "error_screenshots"
-                        if not os.path.exists(err_dir):
-                            os.makedirs(err_dir)
-                        try:
-                            await page_pw.screenshot(path=os.path.join(err_dir, f"error_{group_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"))
-                        except Exception as screenshot_err:
-                            self.log_msg(
-                                f"Không thể chụp screenshot: {str(screenshot_err)[:50]}", is_technical=True)
-                        continue
-
-                    # ✅ Đăng bài THÀNH CÔNG
-                    self.log_msg("✅ Đã đăng bài thành công!",
-                                 is_technical=True)
-
-                    # Chờ cho đến khi popup đăng bài biến mất
-                    await asyncio.sleep(8)
-                    self.log_msg(
-                        f"Hoàn thành nhóm {i}/{len(selected_groups)}.", color=COLORS["success"])
-
-                    # 5. Clean up: Nhấn Escape 2 lần để tắt popup/dialog còn sót
-                    try:
-                        await page_pw.keyboard.press("Escape")
-                        await asyncio.sleep(0.5)
-                        await page_pw.keyboard.press("Escape")
-                        await asyncio.sleep(1)
-                    except Exception as e:
-                        self.log_msg(
-                            f"Cleanup lỗi (context có thể bị destroy): {str(e)[:50]}", is_technical=True)
-
-                except Exception as group_err:
-                    error_str = str(group_err)
-                    if "context" in error_str.lower() and "destroyed" in error_str.lower():
-                        self.log_msg(
-                            f"⚠️ Nhóm {group_name}: Context bị destroy (có thể do navigation)", color=COLORS["error"])
-                    else:
-                        self.log_msg(
-                            f"⚠️ Lỗi xử lý nhóm {group_name}: {error_str[:50]}...", color=COLORS["error"])
-                    # Không set final_status = "Failed" ở đây để không kết thúc hoàn toàn
-                    # Chỉ ghi log và sang nhóm tiếp theo.
-
-                # Nghỉ giữa mỗi nhóm nếu không phải nhóm cuối cùng
-                if i < len(selected_groups):
-                    delay = random.randint(
-                        self.post_delay_min, self.post_delay_max)
-                    # Chỉ hiển thị 1 message, không cập nhật liên tục
-                    self.log_msg(
-                        f"⏳ Chờ {delay}s trước nhóm tiếp theo", color=COLORS["text_muted"])
-                    await asyncio.sleep(delay)
-
-            # ✅ TẤT CẢ NHÓM HOÀN THÀNH - Dọn dẹp dữ liệu (Clear images NGOÀI vòng lặp)
             self.log_msg(
-                "✓ Hoàn thành tất cả nhóm! Đang dọn dẹp dữ liệu...", is_technical=True)
-            self.clear_all_images()  # BẮT BUỘC: Clear images SAU KHI tất cả nhóm đều post xong
+                f"⚠️ Phát hiện phiên đăng bài bị gián đoạn ({summary['remaining']} nhóm còn lại)",
+                color=COLORS["warning"])
 
         except Exception as e:
-            self.log_msg(f"Lỗi hệ thống: {str(e)}",
-                         color=COLORS["error"], is_technical=True)
-            final_status = "Failed"
+            log_error(f"Error checking recovery state: {e}")
+            # Don't let recovery check errors block app startup
+            recovery_manager.clear_recovery_state()
 
-        finally:
-            # Vấn đề 3: Clean up browser context properly
-            try:
-                if browser_context:
-                    await browser_context.close()
-                    self.log_msg("✓ Browser context closed", is_technical=True)
-                if playwright_instance:
-                    await playwright_instance.stop()
-                    self.log_msg("✓ Playwright stopped", is_technical=True)
-            except Exception as cleanup_error:
-                self.log_msg(
-                    f"Browser cleanup failed: {str(cleanup_error)}", is_technical=True)
-
-            # Reset instance variables
-            self.pw_context = None
-            self.pw_instance = None
-
-            self.is_running = False
-
-            # Cập nhật lịch sử
-            if len(self.history_list_view.controls) > 0:
-                self.history_list_view.controls.pop(0)
-                job_data["status"] = final_status
-                self.add_to_history(job_data)
-
-            self.log_msg("Đã dừng tất cả hoạt động.",
-                         color=COLORS["text_muted"], is_technical=True)
-            await asyncio.sleep(2)
+    def _dismiss_recovery(self, e):
+        """User chose to skip recovery - clear state and continue fresh"""
+        try:
+            self._recovery_dialog.open = False
             self.page.update()
-# Copy these methods to the end of app_ui_main.py's AppUI class
+            recovery_manager.clear_recovery_state()
+            self.log_msg("ℹ️ Đã bỏ qua phiên cũ. Bắt đầu mới.",
+                         color=COLORS["text_muted"])
+        except Exception as ex:
+            log_error(f"Error dismissing recovery: {ex}")
+
+    def _resume_from_recovery(self, e):
+        """User chose to resume - restore content, images, and start posting"""
+        try:
+            self._recovery_dialog.open = False
+            self.page.update()
+
+            # Get remaining groups from recovery state
+            remaining_groups = recovery_manager.get_remaining_groups()
+            saved_content = recovery_manager.get_saved_content()
+            saved_images = recovery_manager.get_saved_image_paths()
+            summary = recovery_manager.get_summary()
+
+            if not remaining_groups:
+                self.log_msg("❌ Không tìm thấy nhóm còn lại để tiếp tục.",
+                             color=COLORS["error"])
+                recovery_manager.clear_recovery_state()
+                return
+
+            # Restore content to text field
+            if saved_content:
+                self.text_content.value = saved_content
+                self.log_msg(
+                    f"✅ Đã khôi phục nội dung bài viết ({len(saved_content)} ký tự)",
+                    color=COLORS["success"])
+
+            # Restore images
+            if saved_images:
+                self.image_paths = saved_images
+                self.render_album_slots()
+                self.log_msg(
+                    f"✅ Đã khôi phục {len(saved_images)} ảnh đính kèm",
+                    color=COLORS["success"])
+
+            self.page.update()
+
+            # Log resume info
+            self.log_msg(
+                f"🔄 Tiếp tục đăng bài từ phiên trước: {len(remaining_groups)} nhóm còn lại",
+                color=COLORS["accent"])
+            if summary:
+                self.log_msg(
+                    f"📊 Phiên trước: đã đăng {summary['posted']}/{summary['total']} nhóm",
+                    color=COLORS["text_muted"], is_technical=True)
+
+            # Clear recovery state BEFORE starting (will save new progress)
+            recovery_manager.clear_recovery_state()
+
+            # Start auto posting with recovered groups
+            self._start_auto_with_groups(remaining_groups)
+
+        except Exception as ex:
+            log_error(f"Error resuming from recovery: {ex}")
+            self.log_msg(
+                f"❌ Lỗi khôi phục phiên: {str(ex)[:80]}",
+                color=COLORS["error"])
+            recovery_manager.clear_recovery_state()
+
+    def _start_auto_with_groups(self, groups_to_post):
+        """Start auto-posting with a specific list of groups (used for recovery resume)
+
+        Args:
+            groups_to_post: List of group dicts with 'name' and 'url' keys
+        """
+        import threading
+
+        if self.is_running:
+            self.show_snack("Auto is already running!",
+                            color=COLORS["warning"])
+            return
+
+        # Validate: must have at least text or images
+        post_content = self.text_content.value.strip() if self.text_content.value else ""
+        has_content = bool(post_content)
+        has_images = len(self.image_paths) > 0
+
+        if not has_content and not has_images:
+            self.show_snack("Vui lòng nhập nội dung hoặc thêm ảnh!",
+                            color=COLORS["error"])
+            self.log_msg(
+                "❌ Không thể tiếp tục: không có nội dung và không có ảnh.",
+                color=COLORS["error"])
+            return
+
+        self.is_running = True
+        self.log_msg(
+            f"✓ Tiếp tục đăng bài lên {len(groups_to_post)} nhóm...",
+            color=COLORS["success"])
+        self.show_snack(
+            f"Resuming: posting to {len(groups_to_post)} remaining groups...",
+            color=COLORS["success"])
+
+        # Run in background thread
+        thread = threading.Thread(
+            target=self._run_auto_thread, args=(groups_to_post,), daemon=True)
+        thread.start()
 
     def check_for_updates_async(self):
         """Check for updates in background (non-blocking)"""
