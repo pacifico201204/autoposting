@@ -14,13 +14,6 @@ def get_resource_path(filename):
     In development mode, resources are relative to the project root directory.
 
     Use this for: icon.ico, config.yaml (template only)
-    Do NOT use for writable files like groups.json, history.json, logs/
-
-    Args:
-        filename: Name of the resource file (e.g., 'icon.ico', 'config.yaml')
-
-    Returns:
-        Absolute path to the resource file
     """
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
         # Running as PyInstaller bundled EXE
@@ -32,34 +25,36 @@ def get_resource_path(filename):
 
 
 def get_app_dir():
-    """Get the application working directory for writable files.
-
-    When frozen (PyInstaller): directory containing the .exe
-    When development: project root directory
-
-    Returns:
-        Absolute path to the writable app directory
-    """
+    """Get the application root directory (where the .exe is)."""
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundled EXE - use exe's directory
         return os.path.dirname(sys.executable)
     else:
-        # Running in development mode
         return os.path.dirname(os.path.abspath(__file__))
 
 
 def get_writable_path(filename):
     """Get path for writable files (data, config, logs).
 
-    Unlike get_resource_path, this returns a path in the app directory
-    (next to the .exe) which is writable, not in the read-only _MEIPASS.
-
-    Use this for: groups.json, history.json, config.yaml (user copy), logs/
+    FOR v1.3.25: Everything is hidden inside the '_internal' folder 
+    to keep the root directory clean (only EXE visible).
 
     Args:
-        filename: Name of the file (e.g., 'groups.json', 'history.json')
+        filename: Name of the file (e.g., 'groups.json')
 
     Returns:
-        Absolute path to the writable file location
+        Absolute path pointing to the file inside _internal folder
     """
-    return os.path.join(get_app_dir(), filename)
+    if getattr(sys, 'frozen', False):
+        # In PyInstaller 6+ onedir, _internal stores all data.
+        # We place our writable files there to hide them from user.
+        target_dir = os.path.join(get_app_dir(), "_internal")
+        # Ensure directory exists (it should, but safety first)
+        if not os.path.exists(target_dir):
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+            except:
+                return os.path.join(get_app_dir(), filename) # Fallback to root if locked
+        return os.path.join(target_dir, filename)
+    else:
+        # Development mode
+        return os.path.join(get_app_dir(), filename)
