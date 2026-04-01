@@ -17,7 +17,7 @@ from logger_config import log_debug, log_info, log_error
 from utils import get_writable_path, get_app_dir
 
 # App Version
-APP_VERSION = "2.0.4"
+APP_VERSION = "2.0.5"
 GITHUB_REPO = "pacifico201204/autoposting"
 # Put backups NEXT TO exe folder for safety during restore
 BACKUP_FOLDER = os.path.join(os.path.dirname(get_app_dir()), "AutoPostingTool_Backups")
