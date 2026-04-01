@@ -17,7 +17,7 @@ from logger_config import log_debug, log_info, log_error
 from utils import get_writable_path, get_app_dir
 
 # App Version
-APP_VERSION = "1.3.27"
+APP_VERSION = "1.3.28"
 GITHUB_REPO = "pacifico201204/autoposting"
 # Put backups NEXT TO exe folder for safety during restore
 BACKUP_FOLDER = os.path.join(os.path.dirname(get_app_dir()), "AutoPostingTool_Backups")
@@ -153,13 +153,19 @@ class UpdateManager:
 
             # Find the extracted AutoPostingTool folder
             extracted_app = None
+            # Look for sub-folder (Legacy/Standard structure)
             for item in temp_extract.iterdir():
                 if item.is_dir() and "AutoPostingTool" in item.name:
                     extracted_app = item
                     break
 
+            # If not found in sub-folder (Modern structure v1.3.25+), check if EXE exists in root
             if not extracted_app:
-                return False, "Extracted folder not found"
+                # Check root extracted folder directly
+                if any(item.name == "AutoPostingTool.exe" for item in temp_extract.iterdir()):
+                    extracted_app = temp_extract
+                else:
+                    return False, f"Extracted contents not recognized as AutoPostingTool app folder"
 
             # Robust overwrite for Windows (handles locked files by renaming them)
             if self.app_folder.exists():
