@@ -59,7 +59,7 @@ def main(page: ft.Page):
     page.theme_mode = "dark"
     page.padding = 0
 
-    from app_ui import AppUI
+    from app_ui.app_ui_main import AppUI
 
     app = AppUI(page)
     # The UI was already added by AppUI inside itself if it doesn't return a UserControl

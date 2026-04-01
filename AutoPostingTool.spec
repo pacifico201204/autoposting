@@ -1,4 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+from PyInstaller.utils.hooks import collect_all
+
+# Collection for Engine (The heavy part)
+datas_ps, binaries_ps, hidden_ps = collect_all('playwright_stealth')
 
 a_launcher = Analysis(
     ['launcher.py'],
@@ -7,14 +12,14 @@ a_launcher = Analysis(
     datas=[
         ('app_ui/update_manager.py', 'app_ui'),
         ('utils.py', '.'),
-        # Bundling the STANDALONE ghost_updater.exe inside _internal
         ('dist/ghost_updater.exe', '.') 
     ],
-    hiddenimports=['ctypes', 'subprocess', 'time'],
+    hiddenimports=['ctypes', 'subprocess', 'time', 'requests', 'json', 'zipfile'],
+    # STRICT EXCLUSIONS to keep launcher lightweight and independent
+    excludes=['flet', 'playwright', 'playwright_stealth', 'posting_engine', 'chardet'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
     noarchive=False,
 )
 
@@ -27,8 +32,8 @@ a_engine = Analysis(
         ('config.yaml', '.'),
         ('groups.json', '.'),
         ('utils.py', '.'),
-    ],
-    hiddenimports=['flet', 'playwright', 'yaml', 'json', 'requests', 'chardet'],
+    ] + datas_ps, # Include all playwright_stealth data
+    hiddenimports=['flet', 'playwright', 'yaml', 'json', 'requests', 'chardet'] + hidden_ps,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -49,7 +54,7 @@ exe_launcher = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False, # SILENT LAUNCHER
+    console=False, 
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -63,7 +68,7 @@ exe_engine = EXE(
     a_engine.scripts,
     [],
     exclude_binaries=True,
-    name='AutoPostingEngine.dll', # Camouflage name
+    name='AutoPostingEngine.dll', 
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -83,7 +88,7 @@ coll = COLLECT(
     a_launcher.datas,
     exe_engine,
     a_engine.binaries,
-    a_engine.datas,
+    a_engine.datas + binaries_ps, # Include all binaries from ps
     strip=False,
     upx=True,
     upx_exclude=[],
