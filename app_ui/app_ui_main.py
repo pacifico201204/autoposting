@@ -1861,15 +1861,18 @@ class AppUI:
                 return
 
             self.log_msg("✅ Download complete", color=COLORS["success"])
+            self.log_msg("💡 Vui lòng thoát ứng dụng và mở lại bằng Launcher (AutoPostingTool.exe) để hoàn tất cập nhật.", color=COLORS["warning"])
             
-            # 2. Trigger the "Relay Station" (PowerShell) update
-            self.log_msg("🚀 Preparing update... App will restart shortly.", color=COLORS["success"])
-            self.update_status_text.value = "Installing..."
-            self.update_progress_text.value = "Launching updater..."
+            # Show a clear dialog
+            self.page.dialog = ft.AlertDialog(
+                title=ft.Text("Đã tải xong bản cập nhật"),
+                content=ft.Text("Để đảm bảo an toàn dữ liệu, vui lòng đóng ứng dụng và khởi động lại bằng file AutoPostingTool.exe (Launcher)."),
+                actions=[
+                    ft.TextButton("Đã hiểu", on_click=lambda _: setattr(self.page.dialog, "open", False) or self.page.update())
+                ],
+                open=True
+            )
             self.page.update()
-            
-            time.sleep(1) # Let user see the message
-            self._trigger_ps_updater(result)
 
         except Exception as e:
             self.log_msg(
@@ -1882,88 +1885,5 @@ class AppUI:
             self.page.update()
 
     def _trigger_ps_updater(self, zip_path):
-        """Invoke the Ultimate PowerShell Retry Loop (Non-blocking external update)"""
-        import os
-        import subprocess
-        import sys
-        from pathlib import Path
-        
-        zip_abs = os.path.abspath(zip_path)
-        # Use simple name if frozen, otherwise assume standard name
-        app_exe = sys.executable if getattr(sys, 'frozen', False) else "AutoPostingTool.exe"
-        app_name = os.path.basename(app_exe)
-        
-        # PowerShell script with 10 retry attempts and forced task termination
-        ps_content = f'''
-# AutoPostingTool Ultimate PowerShell Updater
-$ErrorActionPreference = "SilentlyContinue"
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "   AutoPostingTool is installing update  " -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-
-$zipPath = "{zip_abs}"
-$destPath = "."
-$appName = "{app_name}"
-
-# 1. Cho he thong tho 3 giay de os._exit(0) cua Python kip phan huy
-Start-Sleep -s 3
-
-# 2. DIET TAN GOC: Nho tan goc App chinh va TAT CA tien trinh con (Playwright/Node/Chrome)
-# /F la Force, /T la Tree (Diet ca gia pha)
-taskkill /F /IM "$appName" /T 2>$null
-taskkill /F /IM "node.exe" /T 2>$null
-
-$attempt = 1
-$maxAttempts = 10
-$success = $false
-
-# 3. Vong lap ghi de kien tri
-while ($attempt -le $maxAttempts) {{
-    try {{
-        Write-Host "Extraction attempt $attempt of $maxAttempts..." -ForegroundColor Yellow
-        Expand-Archive -Path $zipPath -DestinationPath $destPath -Force -ErrorAction Stop
-        $success = $true
-        break
-    }} catch {{
-        Start-Sleep -s 2
-        $attempt++
-    }}
-}}
-
-# 4. Hoi sinh ung dung va don dep
-if ($success) {{
-    Write-Host "Update thanh cong! Dang bat lai app..." -ForegroundColor Green
-    Start-Process "$appName"
-    
-    # Tu huy de don dep
-    $MyPath = $MyInvocation.MyCommand.Path
-    Remove-Item -Path $zipPath -Force
-    Remove-Item -Path $MyPath -Force
-}} else {{
-    Write-Host "LOI NGHIEM TRONG: Khong the giai nen ban cap nhat." -ForegroundColor Red
-    Write-Host "Vui long giai nen thu cong: $zipPath" -ForegroundColor Yellow
-    Read-Host "Nhan Enter de thoat..."
-}}
-'''
-        ps_file = os.path.abspath("updater.ps1")
-        try:
-            with open(ps_file, "w", encoding="utf-8") as f:
-                f.write(ps_content)
-                
-            # Launch PowerShell with Bypass policy and NoProfile for speed/safety
-            # We use DETACHED_PROCESS to ensure it survives the Python exit
-            DETACHED_PROCESS = 0x00000008
-            CREATE_NO_WINDOW = 0x08000000
-            subprocess.Popen([
-                "powershell.exe", 
-                "-WindowStyle", "Hidden",
-                "-ExecutionPolicy", "Bypass", 
-                "-NoProfile", 
-                "-File", ps_file
-            ], creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW)
-            
-            # Suicide! NUCLEAR BUTTON
-            os._exit(0)
-        except Exception as e:
-            self.log_msg(f"❌ Failed to launch PS updater: {e}", color=COLORS["error"])
-            self.page.update()
+        """No longer used in Launcher architecture. Updates are handled by the Launcher at startup."""
+        pass
