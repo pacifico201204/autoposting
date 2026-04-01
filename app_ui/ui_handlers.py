@@ -4,7 +4,8 @@ Chịu trách nhiệm: Event handlers, dialog callbacks, log view management
 """
 
 import os
-import asyncio
+import threading
+import time
 from datetime import datetime
 import flet as ft
 
@@ -279,147 +280,151 @@ def show_snack(app_instance, message, color=COLORS["bg_card"]):
     app_instance.page.update()
 
 
-async def on_check_update(app_instance, e):
-    """Handler for Check for Updates button"""
-    try:
-        from app_ui.update_manager import UpdateManager
+def on_check_update(app_instance, e):
+    """Handler for Check for Updates button - uses background thread"""
+    def thuc_hien_update_logic():
+        try:
+            from app_ui.update_manager import UpdateManager
 
-        # Show progress
-        app_instance.log_msg("🔄 Checking for updates...",
-                             color=COLORS["text_muted"])
+            # Show progress
+            app_instance.log_msg("🔄 Checking for updates...",
+                                 color=COLORS["text_muted"])
 
-        update_mgr = UpdateManager()
-        result = update_mgr.check_for_updates()
+            update_mgr = UpdateManager()
+            result = update_mgr.check_for_updates()
 
-        if result.get("error"):
-            app_instance.log_msg(
-                f"❌ Check failed: {result['error']}", color=COLORS["error"])
-            return
-
-        if result.get("has_update"):
-            # Update available
-            new_version = result.get("version", "Unknown")
-            current_version = update_mgr.current_version
-
-            app_instance.log_msg(
-                f"✅ Update available: {current_version} → {new_version}",
-                color=COLORS["success"]
-            )
-
-            # Show release notes
-            release_notes = result.get("release_notes", "No release notes")
-            if release_notes:
+            if result.get("error"):
                 app_instance.log_msg(
-                    f"📋 Release Notes:\n{release_notes[:200]}...",
-                    color=COLORS["text_muted"]
+                    f"❌ Check failed: {result['error']}", color=COLORS["error"])
+                return
+
+            if result.get("has_update"):
+                # Update available
+                new_version = result.get("version", "Unknown")
+                current_version = update_mgr.current_version
+
+                app_instance.log_msg(
+                    f"✅ Update available: {current_version} → {new_version}",
+                    color=COLORS["success"]
                 )
 
-            # Backup before update
-            app_instance.log_msg(
-                "📦 Backing up current app...", color=COLORS["text_muted"])
-            backup_success, backup_path = update_mgr.backup_current_app()
+                # Show release notes
+                release_notes = result.get("release_notes", "No release notes")
+                if release_notes:
+                    app_instance.log_msg(
+                        f"📋 Release Notes:\n{release_notes[:200]}...",
+                        color=COLORS["text_muted"]
+                    )
 
-            if backup_success:
+                # Backup before update
                 app_instance.log_msg(
-                    f"✅ Backup created: {backup_path}", color=COLORS["success"])
+                    "📦 Backing up current app...", color=COLORS["text_muted"])
+                backup_success, backup_path = update_mgr.backup_current_app()
 
-                # Start download
-                app_instance.log_msg(
-                    "⬇️ Downloading update...", color=COLORS["text_muted"])
-                download_url = result.get("download_url")
-
-                # For test mode, None URL means mock update
-                if download_url is None and hasattr(update_mgr, 'test_mode') and update_mgr.test_mode:
-                    download_success, download_file = update_mgr.download_update(
-                        None,  # Mock download
-                        progress_callback=lambda done, total:
-                            app_instance.log_msg(
-                                f"Downloaded: {done}/{total} bytes",
-                                color=COLORS["text_muted"]
-                            ) if total > 0 else None
-                    )
-                elif download_url:
-                    download_success, download_file = update_mgr.download_update(
-                        download_url,
-                        progress_callback=lambda done, total:
-                            app_instance.log_msg(
-                                f"Downloaded: {done}/{total} bytes",
-                                color=COLORS["text_muted"]
-                            ) if total > 0 else None
-                    )
-                else:
+                if backup_success:
                     app_instance.log_msg(
-                        "⚠️ No download URL found in release",
-                        color=COLORS["warning"]
-                    )
-                    return
+                        f"✅ Backup created: {backup_path}", color=COLORS["success"])
 
-                if download_success:
+                    # Start download
                     app_instance.log_msg(
-                        f"✅ Download complete: {download_file}",
-                        color=COLORS["success"]
-                    )
+                        "⬇️ Downloading update...", color=COLORS["text_muted"])
+                    download_url = result.get("download_url")
 
-                    # Extract update
-                    app_instance.log_msg(
-                        "📂 Extracting update...", color=COLORS["text_muted"])
-                    extract_success, extract_msg = update_mgr.extract_update(
-                        download_file)
-
-                    if extract_success:
-                        app_instance.log_msg(
-                            f"✅ Update successful! {extract_msg}",
-                            color=COLORS["success"]
+                    # For test mode, None URL means mock update
+                    if download_url is None and hasattr(update_mgr, 'test_mode') and update_mgr.test_mode:
+                        download_success, download_file = update_mgr.download_update(
+                            None,  # Mock download
+                            progress_callback=lambda done, total:
+                                app_instance.log_msg(
+                                    f"Downloaded: {done}/{total} bytes",
+                                    color=COLORS["text_muted"]
+                                ) if total > 0 else None
                         )
-                        app_instance.log_msg(
-                            "🚀 AUTO-RESTART: Ứng dụng sẽ tự khởi động lại sau 5 giây...",
-                            color=COLORS["success"]
+                    elif download_url:
+                        download_success, download_file = update_mgr.download_update(
+                            download_url,
+                            progress_callback=lambda done, total:
+                                app_instance.log_msg(
+                                    f"Downloaded: {done}/{total} bytes",
+                                    color=COLORS["text_muted"]
+                                ) if total > 0 else None
                         )
-                        
-                        # Wait and restart (5 seconds countdown)
-                        for i in range(5, 0, -1):
-                            app_instance.log_msg(f"Restarting in {i}s...", color=COLORS["accent"])
-                            app_instance.page.update()
-                            await asyncio.sleep(1)
-
-                        from utils import restart_application
-                        restart_application(app_instance.page)
                     else:
                         app_instance.log_msg(
-                            f"❌ Extraction failed: {extract_msg}",
-                            color=COLORS["error"]
+                            "⚠️ No download URL found in release",
+                            color=COLORS["warning"]
                         )
-                        # Rollback
+                        return
+
+                    if download_success:
                         app_instance.log_msg(
-                            "⚠️ Rolling back to previous version...", color=COLORS["warning"])
-                        rollback_success, rollback_msg = update_mgr.restore_from_backup(
-                            backup_path)
-                        if rollback_success:
+                            f"✅ Download complete: {download_file}",
+                            color=COLORS["success"]
+                        )
+
+                        # Extract update
+                        app_instance.log_msg(
+                            "📂 Extracting update...", color=COLORS["text_muted"])
+                        extract_success, extract_msg = update_mgr.extract_update(
+                            download_file)
+
+                        if extract_success:
                             app_instance.log_msg(
-                                f"✅ Rollback successful: {rollback_msg}",
+                                f"✅ Update successful! {extract_msg}",
                                 color=COLORS["success"]
                             )
+                            app_instance.log_msg(
+                                "🚀 AUTO-RESTART: Ứng dụng sẽ tự khởi động lại sau 5 giây...",
+                                color=COLORS["success"]
+                            )
+                            
+                            # Wait and restart (5 seconds countdown)
+                            for i in range(5, 0, -1):
+                                app_instance.log_msg(f"Restarting in {i}s...", color=COLORS["accent"])
+                                app_instance.page.update()
+                                time.sleep(1)
+
+                            from utils import restart_application
+                            restart_application(app_instance.page)
+                        else:
+                            app_instance.log_msg(
+                                f"❌ Extraction failed: {extract_msg}",
+                                color=COLORS["error"]
+                            )
+                            # Rollback
+                            app_instance.log_msg(
+                                "⚠️ Rolling back to previous version...", color=COLORS["warning"])
+                            rollback_success, rollback_msg = update_mgr.restore_from_backup(
+                                backup_path)
+                            if rollback_success:
+                                app_instance.log_msg(
+                                    f"✅ Rollback successful: {rollback_msg}",
+                                    color=COLORS["success"]
+                                )
+                    else:
+                        app_instance.log_msg(
+                            f"❌ Download failed: {download_file}",
+                            color=COLORS["error"]
+                        )
                 else:
                     app_instance.log_msg(
-                        f"❌ Download failed: {download_file}",
+                        f"❌ Backup failed: {backup_path}",
                         color=COLORS["error"]
                     )
             else:
+                # No update available
+                current_version = update_mgr.current_version
+                latest_version = result.get("version", "Unknown")
                 app_instance.log_msg(
-                    f"❌ Backup failed: {backup_path}",
-                    color=COLORS["error"]
+                    f"✅ You are up to date! (v{current_version})",
+                    color=COLORS["success"]
                 )
-        else:
-            # No update available
-            current_version = update_mgr.current_version
-            latest_version = result.get("version", "Unknown")
-            app_instance.log_msg(
-                f"✅ You are up to date! (v{current_version})",
-                color=COLORS["success"]
-            )
 
-    except Exception as ex:
-        app_instance.log_msg(
-            f"❌ Update check error: {str(ex)}",
-            color=COLORS["error"]
-        )
+        except Exception as ex:
+            app_instance.log_msg(
+                f"❌ Update check error: {str(ex)}",
+                color=COLORS["error"]
+            )
+            
+    # Launch in background thread to prevent UI lock (Nhát chém 1)
+    threading.Thread(target=thuc_hien_update_logic, daemon=True).start()
