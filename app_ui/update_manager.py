@@ -17,9 +17,10 @@ from logger_config import log_debug, log_info, log_error
 from utils import get_writable_path, get_app_dir
 
 # App Version
-APP_VERSION = "1.3.25"
+APP_VERSION = "1.3.26"
 GITHUB_REPO = "pacifico201204/autoposting"
-BACKUP_FOLDER = get_writable_path("app_backups")
+# Put backups NEXT TO exe folder for safety during restore
+BACKUP_FOLDER = os.path.join(os.path.dirname(get_app_dir()), "AutoPostingTool_Backups")
 
 
 class UpdateManager:
@@ -87,9 +88,17 @@ class UpdateManager:
             if backup_path.exists():
                 shutil.rmtree(backup_path)
 
-            # Copy entire app folder
+            # Copy entire app folder, ignoring backup and venv/temp dirs to avoid recursion
             if self.app_folder.exists():
-                shutil.copytree(self.app_folder, backup_path)
+                ignore_patterns = shutil.ignore_patterns(
+                    'app_backups', 'venv', 'update_temp', '__pycache__', 
+                    '.git', 'dist', 'build', '*.old'
+                )
+                shutil.copytree(
+                    self.app_folder, 
+                    backup_path, 
+                    ignore=ignore_patterns
+                )
 
             # Also backup config
             config_backup = self.backup_folder / \
@@ -213,14 +222,25 @@ class UpdateManager:
             if not backup_dir.exists():
                 return False, f"Backup not found: {backup_path}"
 
-            # Remove current app
-            if self.app_folder.exists():
-                shutil.rmtree(self.app_folder)
+            # Safely restore: Don't remove the root app folder (it might contain backups)
+            # Instead, remove contents EXCEPT the backup folder itself if it were inside
+            for item in self.app_folder.iterdir():
+                if item.is_dir():
+                    # Protect backup folder if it happens to be here
+                    if item.name not in ["app_backups", "_internal/app_backups", "AutoPostingTool_Backups"]:
+                        shutil.rmtree(item)
+                else:
+                    item.unlink()
 
             # Restore from backup
-            shutil.copytree(backup_dir, self.app_folder)
+            for src_item in backup_dir.iterdir():
+                dest_target = self.app_folder / src_item.name
+                if src_item.is_dir():
+                    shutil.copytree(src_item, dest_target)
+                else:
+                    shutil.copy2(src_item, dest_target)
 
-            return True, "App restored from backup"
+            return True, "App restored from backup successfully"
 
         except Exception as e:
             return False, f"Restore failed: {str(e)}"
