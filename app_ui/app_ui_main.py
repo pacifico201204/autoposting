@@ -1920,18 +1920,18 @@ class AppUI:
             # 5. Success!
             self.log_msg(
                 f"🎉 Update to v{update_info['version']} completed successfully!", color=COLORS["success"])
-            self.log_msg("🚀 Ứng dụng sẽ tự khởi động lại sau 3 giây để áp dụng bản cập nhật...",
+            self.log_msg("🚀 AUTO-RESTART: Ứng dụng sẽ tự khởi động lại sau 5 giây để áp dụng bản cập nhật...",
                          color=COLORS["success"])
             
-            self.update_status_text.value = "Updated! Restarting..."
+            self.update_status_text.value = "Updated! Restarting in 5s..."
             self.update_status_text.color = COLORS["success"]
-            self.update_progress_text.value = "Restarting in 3s..."
+            self.update_progress_text.value = "Restarting in 5s..."
             self.update_progress_bar.color = COLORS["success"]
             self.page.update()
 
-            # Wait and restart
+            # Wait and restart (5 seconds as requested)
             import time
-            time.sleep(3)
+            time.sleep(5)
             restart_application()
 
             self.version_text.value = f"v{update_info['version']} (restart needed)"

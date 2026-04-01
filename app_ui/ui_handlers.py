@@ -371,13 +371,13 @@ def on_check_update(app_instance, e):
                             color=COLORS["success"]
                         )
                         app_instance.log_msg(
-                            "🚀 Ứng dụng sẽ tự khởi động lại sau 3 giây để áp dụng bản cập nhật...",
+                            "🚀 AUTO-RESTART: Ứng dụng sẽ tự khởi động lại sau 5 giây để áp dụng bản cập nhật...",
                             color=COLORS["success"]
                         )
                         
-                        # Wait and restart
+                        # Wait and restart (5 seconds as requested)
                         import time
-                        time.sleep(3)
+                        time.sleep(5)
                         from utils import restart_application
                         restart_application()
                     else:

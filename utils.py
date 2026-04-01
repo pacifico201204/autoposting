@@ -64,25 +64,25 @@ def get_writable_path(filename):
 def restart_application():
     """Restart the application.
     
-    When frozen: restarts the EXE.
+    When frozen: restarts the EXE using os.startfile for detached process.
     When in development: restarts the script.
     """
     try:
-        # Use subprocess to detach the new process
         if getattr(sys, 'frozen', False):
             # EXE mode
             executable = sys.executable
-            # subprocess.Popen([executable], creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
-            # More stable for detached process:
+            # os.startfile is built-in to Windows to open a file with its associated app (or execute an EXE)
+            # It starts the process and doesn't wait, which is perfect for self-restart.
             os.startfile(executable)
         else:
             # Python script mode
             executable = sys.executable
             script = sys.argv[0]
-            # subprocess.Popen([executable, script])
-            os.startfile(script)
+            # Use subprocess for development mode restart
+            subprocess.Popen([executable, script])
             
-        sys.exit(0)
+        # Exit the current process IMMEDIATELY
+        os._exit(0) 
     except Exception as e:
         print(f"Failed to restart: {e}")
-        sys.exit(1)
+        os._exit(1)
