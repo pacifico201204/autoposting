@@ -1831,27 +1831,9 @@ class AppUI:
             self.update_status_text.value = "Updating..."
             self.btn_check_update_menu.visible = False
             self.update_progress_container.visible = True
-            self.update_progress_text.value = "Backing up..."
-            self.update_progress_bar.value = None # Indeterminate
             self.page.update()
 
-            # 1. Backup current version
-            self.log_msg("💾 Backing up current version...",
-                         color=COLORS["text_muted"])
-            success, backup_path = self.update_manager.backup_current_app()
-
-            if not success:
-                self.log_msg(
-                    f"❌ Backup failed: {backup_path}", color=COLORS["error"])
-                self.update_status_text.value = "Backup failed"
-                self.update_status_text.color = COLORS["error"]
-                self.page.update()
-                return
-
-            self.log_msg(
-                f"✅ Backup created: {backup_path}", color=COLORS["success"], is_technical=True)
-
-            # 2. Download update
+            # 1. Download update
             self.log_msg("📥 Downloading update...", color=COLORS["text_muted"])
             
             self.last_percent = -1
@@ -1859,7 +1841,6 @@ class AppUI:
                 if total > 0:
                     percent = downloaded / total
                     current_pct = int(percent * 100)
-                    # Only update UI if percentage changed to avoid overwhelming the bridge
                     if current_pct != self.last_percent:
                         self.last_percent = current_pct
                         self.update_progress_bar.value = percent
@@ -1875,73 +1856,20 @@ class AppUI:
                 self.update_status_text.value = "Download failed"
                 self.update_status_text.color = COLORS["error"]
                 self.update_progress_text.value = "Download failed"
-                self.update_progress_bar.color = COLORS["error"]
                 self.btn_check_update_menu.visible = True
                 self.page.update()
                 return
 
             self.log_msg("✅ Download complete", color=COLORS["success"])
-
-            # 3. Extract update
-            self.log_msg("📦 Extracting update...", color=COLORS["text_muted"])
-            self.update_progress_text.value = "Extracting..."
-            self.update_progress_bar.value = None
+            
+            # 2. Trigger the "Relay Station" (.bat) update
+            self.log_msg("🚀 Preparing update... App will restart shortly.", color=COLORS["success"])
+            self.update_status_text.value = "Installing..."
+            self.update_progress_text.value = "Launching updater..."
             self.page.update()
             
-            success, message = self.update_manager.extract_update(result)
-
-            if not success:
-                self.log_msg(
-                    f"❌ Extraction failed: {message}", color=COLORS["error"])
-                self.log_msg("🔄 Rolling back to previous version...",
-                             color=COLORS["warning"])
-
-                # Rollback
-                self.update_manager.restore_from_backup(backup_path)
-                self.update_status_text.value = "Update failed (rolled back)"
-                self.update_status_text.color = COLORS["error"]
-                self.update_progress_text.value = "Failed (rolled back)"
-                self.update_progress_bar.color = COLORS["error"]
-                self.update_progress_bar.value = 1.0
-                self.btn_check_update_menu.visible = True
-                self.page.update()
-                return
-
-            self.log_msg("✅ Update extracted successfully",
-                         color=COLORS["success"])
-
-            # 4. Cleanup old backups
-            self.update_manager.cleanup_old_backups()
-
-            # 5. Success!
-            self.log_msg(
-                f"🎉 Update to v{update_info['version']} completed successfully!", color=COLORS["success"])
-            self.log_msg("🚀 AUTO-RESTART: Ứng dụng sẽ tự khởi động lại sau 5 giây...",
-                         color=COLORS["success"])
-            
-            # Cập nhật UI ngay lập tức
-            self.update_status_text.value = "Updated! Restarting in 5s..."
-            self.update_status_text.color = COLORS["success"]
-            self.update_progress_text.value = "Restarting in 5s..."
-            self.update_progress_bar.value = 1.0
-            self.update_progress_bar.color = COLORS["success"]
-            self.page.update()
-
-            # Đợi 5 giây để người dùng đọc thông báo (Vẫn cho phép UI phản hồi)
-            for i in range(5, 0, -1):
-                self.update_progress_text.value = f"Restarting in {i}s..."
-                self.page.update()
-                time.sleep(1)
-            
-            # Lệnh Restart dứt khoát
-            restart_application(self.page)
-
-            self.version_text.value = f"v{update_info['version']} (restart needed)"
-            self.update_status_text.value = "Update complete - restart needed"
-            self.update_status_text.color = COLORS["warning"]
-            self.update_progress_text.value = "Restart to install"
-            self.update_progress_bar.value = 1.0
-            self.page.update()
+            time.sleep(1) # Let user see the message
+            self._trigger_bat_updater(result)
 
         except Exception as e:
             self.log_msg(
@@ -1951,4 +1879,49 @@ class AppUI:
             self.update_progress_text.value = "Update errored"
             self.update_progress_bar.color = COLORS["error"]
             self.btn_check_update_menu.visible = True
+            self.page.update()
+
+    def _trigger_bat_updater(self, zip_path):
+        """Create and run a .bat script to perform the update while the app is closed (Nhát chém 3)"""
+        import os
+        import subprocess
+        import sys
+        
+        # Ensure path is absolute for the .bat
+        zip_abs = os.path.abspath(zip_path)
+        app_exe = sys.executable if getattr(sys, 'frozen', False) else "AutoPostingTool.exe"
+        app_name = os.path.basename(app_exe)
+        
+        # Use tar -xf which is built-in Windows 10/11
+        bat_content = f"""@echo off
+title AutoPostingTool Updater
+echo ========================================
+echo   AutoPostingTool is installing update  
+echo ========================================
+echo.
+echo [1/3] Waiting for application to exit...
+timeout /t 3 /nobreak >nul
+
+echo [2/3] Extracting new files...
+tar -xf "{zip_abs}" -C .
+
+echo [3/3] Starting new version...
+start "" "{app_name}"
+
+echo.
+echo Update complete! This window will close.
+del "%~f0"
+"""
+        bat_path = "updater.bat"
+        try:
+            with open(bat_path, "w", encoding="ascii") as f:
+                f.write(bat_content)
+                
+            CREATE_NO_WINDOW = 0x08000000
+            subprocess.Popen([bat_path], creationflags=CREATE_NO_WINDOW if getattr(sys, 'frozen', False) else 0)
+            
+            # Suicide!
+            os._exit(0)
+        except Exception as e:
+            self.log_msg(f"❌ Failed to launch updater: {e}", color=COLORS["error"])
             self.page.update()
