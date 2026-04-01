@@ -1700,11 +1700,10 @@ class AppUI:
         """Check for updates in background (non-blocking)"""
         self.page.run_task(self._check_updates_thread)
 
-    def _check_updates_thread(self):
+    async def _check_updates_thread(self):
         """Background thread to check for updates"""
         try:
-            import time
-            time.sleep(2)  # Wait for UI to load first
+            await asyncio.sleep(2)  # Wait for UI to load first
 
             update_info = self.update_manager.check_for_updates()
 
@@ -1755,7 +1754,7 @@ class AppUI:
 
         self.page.run_task(self._perform_update_check)
 
-    def _perform_update_check(self):
+    async def _perform_update_check(self):
         """Perform update check in background"""
         try:
             update_info = self.update_manager.check_for_updates()
@@ -1823,7 +1822,7 @@ class AppUI:
         self.update_dialog.open = True
         self.page.update()
 
-    def _do_update(self, update_info):
+    async def _do_update(self, update_info):
         """Perform the actual update with backup and rollback"""
         try:
             self.log_msg("🔄 Starting update process...",
@@ -1928,11 +1927,10 @@ class AppUI:
             self.page.update()
 
             # Đợi 5 giây để người dùng đọc thông báo (Vẫn cho phép UI phản hồi)
-            import time
             for i in range(5, 0, -1):
                 self.update_progress_text.value = f"Restarting in {i}s..."
                 self.page.update()
-                time.sleep(1)
+                await asyncio.sleep(1)
             
             # Lệnh Restart dứt khoát
             restart_application(self.page)

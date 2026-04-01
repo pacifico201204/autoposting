@@ -4,6 +4,7 @@ Chịu trách nhiệm: Event handlers, dialog callbacks, log view management
 """
 
 import os
+import asyncio
 from datetime import datetime
 import flet as ft
 
@@ -278,7 +279,7 @@ def show_snack(app_instance, message, color=COLORS["bg_card"]):
     app_instance.page.update()
 
 
-def on_check_update(app_instance, e):
+async def on_check_update(app_instance, e):
     """Handler for Check for Updates button"""
     try:
         from app_ui.update_manager import UpdateManager
@@ -376,11 +377,10 @@ def on_check_update(app_instance, e):
                         )
                         
                         # Wait and restart (5 seconds countdown)
-                        import time
                         for i in range(5, 0, -1):
                             app_instance.log_msg(f"Restarting in {i}s...", color=COLORS["accent"])
                             app_instance.page.update()
-                            time.sleep(1)
+                            await asyncio.sleep(1)
 
                         from utils import restart_application
                         restart_application(app_instance.page)
