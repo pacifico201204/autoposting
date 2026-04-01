@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Auto Posting Tool - Launcher & Main App Spec
+# Auto Posting Tool - Silent Launcher & DLL-Camouflage Engine Spec
 # Built with PyInstaller 6+
 
 import sys
@@ -10,7 +10,7 @@ block_cipher = None
 # Paths
 VENV_SITE_PACKAGES = os.path.join('venv', 'Lib', 'site-packages')
 
-# Common hidden imports and excludes
+# Common hidden imports for BOTH
 HIDDEN_IMPORTS = [
     'flet', 'flet.app', 'flet.controls', 'flet.utils', 'flet_desktop', 'flet_desktop.version',
     'playwright', 'playwright.async_api', 'playwright._impl', 'playwright._impl._api_types', 'playwright_stealth',
@@ -37,7 +37,7 @@ datas = [
     ('app_ui', 'app_ui'),
 ]
 
-# Source modules
+# Source modules to be included in _internal
 all_py_modules = [
     'posting_engine.py', 'storage.py', 'utils.py', 'logger_config.py',
     'validators.py', 'exceptions.py', 'dynamic_selector.py', 'anti_detection.py',
@@ -48,7 +48,7 @@ for mod in all_py_modules:
     if os.path.exists(mod):
         datas.append((mod, '.'))
 
-# Analysis for MAIN APP
+# Analysis for MAIN APP (The Disguised Engine)
 a_main = Analysis(
     ['main.py'],
     pathex=['.'],
@@ -56,7 +56,6 @@ a_main = Analysis(
     datas=datas,
     hiddenimports=HIDDEN_IMPORTS,
     hookspath=[],
-    hooksconfig={},
     runtime_hooks=[],
     excludes=EXCLUDES,
     win_no_prefer_redirects=False,
@@ -65,12 +64,12 @@ a_main = Analysis(
     noarchive=False,
 )
 
-# Analysis for LAUNCHER
+# Analysis for LAUNCHER (The Silent One)
 a_launcher = Analysis(
     ['launcher.py'],
     pathex=['.'],
     binaries=[],
-    datas=datas, # Sharing same datas
+    datas=datas, 
     hiddenimports=HIDDEN_IMPORTS,
     hookspath=[],
     excludes=EXCLUDES,
@@ -80,13 +79,13 @@ a_launcher = Analysis(
 pyz_main = PYZ(a_main.pure, a_main.zipped_data, cipher=block_cipher)
 pyz_launcher = PYZ(a_launcher.pure, a_launcher.zipped_data, cipher=block_cipher)
 
-# EXE for Main App (to be placed in _app subfolder)
+# EXE for Main App - Disguised as a DLL
 exe_main = EXE(
     pyz_main,
     a_main.scripts,
     [],
     exclude_binaries=True,
-    name='AutoPostingMain',
+    name='AutoPostingEngine.dll', # DLL Extension but it's an EXE under the hood
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -95,13 +94,13 @@ exe_main = EXE(
     icon='icon.ico',
 )
 
-# EXE for Launcher (Root level)
+# EXE for Launcher (Root level, named like the main tool)
 exe_launcher = EXE(
     pyz_launcher,
     a_launcher.scripts,
     [],
     exclude_binaries=True,
-    name='AutoPostingTool',
+    name='AutoPostingTool', # This remains .exe
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -111,15 +110,12 @@ exe_launcher = EXE(
 )
 
 coll = COLLECT(
-    exe_launcher, # Target 1 (Root)
+    exe_launcher, 
     a_launcher.binaries,
     a_launcher.zipfiles,
     a_launcher.datas,
-    # Main App Binary
-    exe_main,     # Target 2
+    exe_main,     
     a_main.binaries,
-    a_main.zipfiles,
-    a_main.datas,
     strip=False,
     upx=True,
     upx_exclude=[],
