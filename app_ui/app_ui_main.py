@@ -1895,8 +1895,8 @@ class AppUI:
         
         # PowerShell script with 10 retry attempts and forced task termination
         ps_content = f'''
-# AutoPostingTool PowerShell Updater
-$ErrorActionPreference = "Stop"
+# AutoPostingTool Ultimate PowerShell Updater
+$ErrorActionPreference = "SilentlyContinue"
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "   AutoPostingTool is installing update  " -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
@@ -1904,69 +1904,65 @@ Write-Host "========================================" -ForegroundColor Cyan
 $zipPath = "{zip_abs}"
 $destPath = "."
 $appName = "{app_name}"
-$logFile = "update_debug.log"
 
-Function Log($msg) {{
-    $timestamp = Get-Date -Format "HH:mm:ss"
-    Write-Host "[$timestamp] $msg"
-    "[$timestamp] $msg" | Out-File $logFile -Append
-}}
-
-Log "Waiting 3 seconds for main process to exit..."
+# 1. Cho he thong tho 3 giay de os._exit(0) cua Python kip phan huy
 Start-Sleep -s 3
 
-# Force kill any lingering processes just in case
-Log "Ensuring all related processes are stopped..."
-Get-Process | Where-Object {{ $_.ProcessName -like "AutoPostingTool*" }} | Stop-Process -Force -ErrorAction SilentlyContinue
+# 2. DIET TAN GOC: Nho tan goc App chinh va TAT CA tien trinh con (Playwright/Node/Chrome)
+# /F la Force, /T la Tree (Diet ca gia pha)
+taskkill /F /IM "$appName" /T 2>$null
+taskkill /F /IM "node.exe" /T 2>$null
 
 $attempt = 1
 $maxAttempts = 10
 $success = $false
 
+# 3. Vong lap ghi de kien tri
 while ($attempt -le $maxAttempts) {{
     try {{
-        Log "Extraction attempt $attempt of $maxAttempts..."
-        # Force overwrite (-Force) and Stop on error to trigger catch
-        Expand-Archive -Path $zipPath -DestinationPath $destPath -Force
+        Write-Host "Extraction attempt $attempt of $maxAttempts..." -ForegroundColor Yellow
+        Expand-Archive -Path $zipPath -DestinationPath $destPath -Force -ErrorAction Stop
         $success = $true
         break
     }} catch {{
-        Log "FAILED: $($_.Exception.Message)"
-        Log "Retrying in 2 seconds..."
         Start-Sleep -s 2
         $attempt++
     }}
 }}
 
+# 4. Hoi sinh ung dung va don dep
 if ($success) {{
-    Log "SUCCESS: Update installed."
-    Log "Starting new version..."
-    Start-Process $appName
+    Write-Host "Update thanh cong! Dang bat lai app..." -ForegroundColor Green
+    Start-Process "$appName"
+    
+    # Tu huy de don dep
+    $MyPath = $MyInvocation.MyCommand.Path
+    Remove-Item -Path $zipPath -Force
+    Remove-Item -Path $MyPath -Force
 }} else {{
-    Log "CRITICAL ERROR: Failed to install update after $maxAttempts attempts."
-    Log "Please extract the zip manually: $zipPath"
-    Read-Host "Press Enter to exit..."
+    Write-Host "LOI NGHIEM TRONG: Khong the giai nen ban cap nhat." -ForegroundColor Red
+    Write-Host "Vui long giai nen thu cong: $zipPath" -ForegroundColor Yellow
+    Read-Host "Nhan Enter de thoat..."
 }}
-
-# Self-destruct the PowerShell script (cannot delete while running via -File if not careful)
-# But we start it from a temp location or just let it be.
 '''
-        ps_file = "updater.ps1"
+        ps_file = os.path.abspath("updater.ps1")
         try:
             with open(ps_file, "w", encoding="utf-8") as f:
                 f.write(ps_content)
                 
             # Launch PowerShell with Bypass policy and NoProfile for speed/safety
             # We use DETACHED_PROCESS to ensure it survives the Python exit
+            DETACHED_PROCESS = 0x00000008
             CREATE_NO_WINDOW = 0x08000000
             subprocess.Popen([
-                "powershell", 
+                "powershell.exe", 
+                "-WindowStyle", "Hidden",
                 "-ExecutionPolicy", "Bypass", 
                 "-NoProfile", 
                 "-File", ps_file
-            ], creationflags=CREATE_NO_WINDOW if getattr(sys, 'frozen', False) else 0)
+            ], creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW)
             
-            # Suicide!
+            # Suicide! NUCLEAR BUTTON
             os._exit(0)
         except Exception as e:
             self.log_msg(f"❌ Failed to launch PS updater: {e}", color=COLORS["error"])
