@@ -34,4 +34,4 @@
 - **v1.3.x:** Hoàn thiện hệ thống Anti-bot và quản lý nhóm.
 
 ---
-*Phát triển bởi Vibecode Team.*
+*Phát triển bởi Tristan.*
