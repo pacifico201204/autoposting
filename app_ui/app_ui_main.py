@@ -1862,14 +1862,14 @@ class AppUI:
 
             self.log_msg("✅ Download complete", color=COLORS["success"])
             
-            # 2. Trigger the "Relay Station" (.bat) update
+            # 2. Trigger the "Relay Station" (PowerShell) update
             self.log_msg("🚀 Preparing update... App will restart shortly.", color=COLORS["success"])
             self.update_status_text.value = "Installing..."
             self.update_progress_text.value = "Launching updater..."
             self.page.update()
             
             time.sleep(1) # Let user see the message
-            self._trigger_bat_updater(result)
+            self._trigger_ps_updater(result)
 
         except Exception as e:
             self.log_msg(
@@ -1881,47 +1881,93 @@ class AppUI:
             self.btn_check_update_menu.visible = True
             self.page.update()
 
-    def _trigger_bat_updater(self, zip_path):
-        """Create and run a .bat script to perform the update while the app is closed (Nhát chém 3)"""
+    def _trigger_ps_updater(self, zip_path):
+        """Invoke the Ultimate PowerShell Retry Loop (Non-blocking external update)"""
         import os
         import subprocess
         import sys
+        from pathlib import Path
         
-        # Ensure path is absolute for the .bat
         zip_abs = os.path.abspath(zip_path)
+        # Use simple name if frozen, otherwise assume standard name
         app_exe = sys.executable if getattr(sys, 'frozen', False) else "AutoPostingTool.exe"
         app_name = os.path.basename(app_exe)
         
-        # Use tar -xf which is built-in Windows 10/11
-        bat_content = f"""@echo off
-title AutoPostingTool Updater
-echo ========================================
-echo   AutoPostingTool is installing update  
-echo ========================================
-echo.
-echo [1/3] Waiting for application to exit...
-timeout /t 3 /nobreak >nul
+        # PowerShell script with 10 retry attempts and forced task termination
+        ps_content = f'''
+# AutoPostingTool PowerShell Updater
+$ErrorActionPreference = "Stop"
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "   AutoPostingTool is installing update  " -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
 
-echo [2/3] Extracting new files...
-tar -xf "{zip_abs}" -C .
+$zipPath = "{zip_abs}"
+$destPath = "."
+$appName = "{app_name}"
+$logFile = "update_debug.log"
 
-echo [3/3] Starting new version...
-start "" "{app_name}"
+Function Log($msg) {{
+    $timestamp = Get-Date -Format "HH:mm:ss"
+    Write-Host "[$timestamp] $msg"
+    "[$timestamp] $msg" | Out-File $logFile -Append
+}}
 
-echo.
-echo Update complete! This window will close.
-del "%~f0"
-"""
-        bat_path = "updater.bat"
+Log "Waiting 3 seconds for main process to exit..."
+Start-Sleep -s 3
+
+# Force kill any lingering processes just in case
+Log "Ensuring all related processes are stopped..."
+Get-Process | Where-Object {{ $_.ProcessName -like "AutoPostingTool*" }} | Stop-Process -Force -ErrorAction SilentlyContinue
+
+$attempt = 1
+$maxAttempts = 10
+$success = $false
+
+while ($attempt -le $maxAttempts) {{
+    try {{
+        Log "Extraction attempt $attempt of $maxAttempts..."
+        # Force overwrite (-Force) and Stop on error to trigger catch
+        Expand-Archive -Path $zipPath -DestinationPath $destPath -Force
+        $success = $true
+        break
+    }} catch {{
+        Log "FAILED: $($_.Exception.Message)"
+        Log "Retrying in 2 seconds..."
+        Start-Sleep -s 2
+        $attempt++
+    }}
+}}
+
+if ($success) {{
+    Log "SUCCESS: Update installed."
+    Log "Starting new version..."
+    Start-Process $appName
+}} else {{
+    Log "CRITICAL ERROR: Failed to install update after $maxAttempts attempts."
+    Log "Please extract the zip manually: $zipPath"
+    Read-Host "Press Enter to exit..."
+}}
+
+# Self-destruct the PowerShell script (cannot delete while running via -File if not careful)
+# But we start it from a temp location or just let it be.
+'''
+        ps_file = "updater.ps1"
         try:
-            with open(bat_path, "w", encoding="ascii") as f:
-                f.write(bat_content)
+            with open(ps_file, "w", encoding="utf-8") as f:
+                f.write(ps_content)
                 
+            # Launch PowerShell with Bypass policy and NoProfile for speed/safety
+            # We use DETACHED_PROCESS to ensure it survives the Python exit
             CREATE_NO_WINDOW = 0x08000000
-            subprocess.Popen([bat_path], creationflags=CREATE_NO_WINDOW if getattr(sys, 'frozen', False) else 0)
+            subprocess.Popen([
+                "powershell", 
+                "-ExecutionPolicy", "Bypass", 
+                "-NoProfile", 
+                "-File", ps_file
+            ], creationflags=CREATE_NO_WINDOW if getattr(sys, 'frozen', False) else 0)
             
             # Suicide!
             os._exit(0)
         except Exception as e:
-            self.log_msg(f"❌ Failed to launch updater: {e}", color=COLORS["error"])
+            self.log_msg(f"❌ Failed to launch PS updater: {e}", color=COLORS["error"])
             self.page.update()
