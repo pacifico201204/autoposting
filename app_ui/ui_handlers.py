@@ -371,9 +371,15 @@ def on_check_update(app_instance, e):
                             color=COLORS["success"]
                         )
                         app_instance.log_msg(
-                            "🔄 Please restart the app to apply changes",
-                            color=COLORS["warning"]
+                            "🚀 Ứng dụng sẽ tự khởi động lại sau 3 giây để áp dụng bản cập nhật...",
+                            color=COLORS["success"]
                         )
+                        
+                        # Wait and restart
+                        import time
+                        time.sleep(3)
+                        from utils import restart_application
+                        restart_application()
                     else:
                         app_instance.log_msg(
                             f"❌ Extraction failed: {extract_msg}",

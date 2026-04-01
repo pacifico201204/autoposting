@@ -5,6 +5,7 @@ Consolidates common functions used across multiple modules.
 
 import os
 import sys
+import subprocess
 
 
 def get_resource_path(filename):
@@ -35,7 +36,7 @@ def get_app_dir():
 def get_writable_path(filename):
     """Get path for writable files (data, config, logs).
 
-    FOR v1.3.25: Everything is hidden inside the '_internal' folder 
+    FOR v1.3.25+: Everything is hidden inside the '_internal' folder 
     to keep the root directory clean (only EXE visible).
 
     Args:
@@ -58,3 +59,30 @@ def get_writable_path(filename):
     else:
         # Development mode
         return os.path.join(get_app_dir(), filename)
+
+
+def restart_application():
+    """Restart the application.
+    
+    When frozen: restarts the EXE.
+    When in development: restarts the script.
+    """
+    try:
+        # Use subprocess to detach the new process
+        if getattr(sys, 'frozen', False):
+            # EXE mode
+            executable = sys.executable
+            # subprocess.Popen([executable], creationflags=subprocess.CREATE_NEW_CONSOLE if os.name == 'nt' else 0)
+            # More stable for detached process:
+            os.startfile(executable)
+        else:
+            # Python script mode
+            executable = sys.executable
+            script = sys.argv[0]
+            # subprocess.Popen([executable, script])
+            os.startfile(script)
+            
+        sys.exit(0)
+    except Exception as e:
+        print(f"Failed to restart: {e}")
+        sys.exit(1)

@@ -37,7 +37,7 @@ mod_guard = get_modification_guard()
 # Get base path for bundled resources (PyInstaller or development)
 
 
-from utils import get_resource_path, get_writable_path
+from utils import get_resource_path, get_writable_path, restart_application
 
 # Load configuration from config.yaml
 
@@ -1920,8 +1920,19 @@ class AppUI:
             # 5. Success!
             self.log_msg(
                 f"🎉 Update to v{update_info['version']} completed successfully!", color=COLORS["success"])
-            self.log_msg("⚠️ Restart the app to use the new version",
-                         color=COLORS["warning"])
+            self.log_msg("🚀 Ứng dụng sẽ tự khởi động lại sau 3 giây để áp dụng bản cập nhật...",
+                         color=COLORS["success"])
+            
+            self.update_status_text.value = "Updated! Restarting..."
+            self.update_status_text.color = COLORS["success"]
+            self.update_progress_text.value = "Restarting in 3s..."
+            self.update_progress_bar.color = COLORS["success"]
+            self.page.update()
+
+            # Wait and restart
+            import time
+            time.sleep(3)
+            restart_application()
 
             self.version_text.value = f"v{update_info['version']} (restart needed)"
             self.update_status_text.value = "Update complete - restart needed"
