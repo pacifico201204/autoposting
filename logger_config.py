@@ -9,8 +9,14 @@ import logging.handlers
 import os
 from datetime import datetime
 
+# Use writable dir for logs (next to exe, not in _MEIPASS)
+try:
+    from utils import get_writable_path
+    LOG_DIR = get_writable_path("logs")
+except Exception:
+    LOG_DIR = "logs"
+
 # Tạo thư mục logs nếu chưa tồn tại
-LOG_DIR = "logs"
 try:
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR, exist_ok=True)

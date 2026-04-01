@@ -32,7 +32,7 @@ auto_runner = get_auto_runner()
 mod_guard = get_modification_guard()
 
 
-from utils import get_resource_path
+from utils import get_resource_path, get_writable_path
 
 
 class PostingEngine:
@@ -160,8 +160,7 @@ class PostingEngine:
                 playwright_instance = await async_playwright().start()
                 self.pw_instance = playwright_instance
 
-                user_data_dir = os.path.abspath(
-                    os.path.join(os.getcwd(), "fb_user_data_edge"))
+                user_data_dir = get_writable_path("fb_user_data_edge")
                 if not os.path.exists(user_data_dir):
                     os.makedirs(user_data_dir)
 
@@ -569,7 +568,7 @@ class PostingEngine:
                         failed_groups.append(group_name)
 
                         # Take error screenshot
-                        err_dir = "error_screenshots"
+                        err_dir = get_writable_path("error_screenshots")
                         if not os.path.exists(err_dir):
                             os.makedirs(err_dir)
                         try:

@@ -1,8 +1,9 @@
 import json
 import os
 from logger_config import log_error
+from utils import get_writable_path
 
-DATA_FILE = "groups.json"
+DATA_FILE = get_writable_path("groups.json")
 
 
 def load_groups():

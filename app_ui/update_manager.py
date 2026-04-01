@@ -14,11 +14,12 @@ import requests
 from datetime import datetime
 from pathlib import Path
 from logger_config import log_debug, log_info, log_error
+from utils import get_writable_path, get_app_dir
 
 # App Version
 APP_VERSION = "1.3.24"
 GITHUB_REPO = "pacifico201204/autoposting"
-BACKUP_FOLDER = "app_backups"
+BACKUP_FOLDER = get_writable_path("app_backups")
 
 
 class UpdateManager:
@@ -30,8 +31,7 @@ class UpdateManager:
         except Exception as e:
             log_error(f"Failed to create backup folder: {e}")
             # Continue anyway, backup just won't work
-        self.app_folder = Path(
-            "dist/AutoPostingTool") if os.path.exists("dist/AutoPostingTool") else Path(".")
+        self.app_folder = Path(get_app_dir())
 
     def check_for_updates(self) -> dict:
         """

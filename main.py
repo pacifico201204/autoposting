@@ -2,6 +2,10 @@ import os
 import flet as ft
 import ssl
 import sys
+import builtins
+
+# Fix for PyInstaller: ensure exit() is available for Flet
+builtins.exit = sys.exit
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -30,4 +34,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(target=main)
+    ft.run(main)

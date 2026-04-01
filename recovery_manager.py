@@ -9,12 +9,13 @@ import os
 import tempfile
 from datetime import datetime
 from logger_config import log_info, log_error, log_warning
+from utils import get_writable_path
 
 
 class RecoveryManager:
     """Manage crash recovery and posting progress"""
 
-    RECOVERY_FILE = "recovery_state.json"
+    RECOVERY_FILE = get_writable_path("recovery_state.json")
     MAX_RECOVERY_FILE_SIZE = 1 * 1024 * 1024  # 1MB max
 
     def __init__(self):
