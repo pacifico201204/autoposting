@@ -1863,12 +1863,17 @@ class AppUI:
             # 2. Download update
             self.log_msg("📥 Downloading update...", color=COLORS["text_muted"])
             
+            self.last_percent = -1
             def download_progress(downloaded, total):
                 if total > 0:
                     percent = downloaded / total
-                    self.update_progress_bar.value = percent
-                    self.update_progress_text.value = f"Downloading v{update_info['version']}... {int(percent*100)}%"
-                    self.page.update()
+                    current_pct = int(percent * 100)
+                    # Only update UI if percentage changed to avoid overwhelming the bridge
+                    if current_pct != self.last_percent:
+                        self.last_percent = current_pct
+                        self.update_progress_bar.value = percent
+                        self.update_progress_text.value = f"Downloading v{update_info['version']}... {current_pct}%"
+                        self.page.update()
 
             success, result = self.update_manager.download_update(
                 update_info["download_url"], progress_callback=download_progress)
@@ -1920,18 +1925,25 @@ class AppUI:
             # 5. Success!
             self.log_msg(
                 f"🎉 Update to v{update_info['version']} completed successfully!", color=COLORS["success"])
-            self.log_msg("🚀 AUTO-RESTART: Ứng dụng sẽ tự khởi động lại sau 5 giây để áp dụng bản cập nhật...",
+            self.log_msg("🚀 AUTO-RESTART: Ứng dụng sẽ tự khởi động lại sau 5 giây...",
                          color=COLORS["success"])
             
+            # Cập nhật UI ngay lập tức
             self.update_status_text.value = "Updated! Restarting in 5s..."
             self.update_status_text.color = COLORS["success"]
             self.update_progress_text.value = "Restarting in 5s..."
+            self.update_progress_bar.value = 1.0
             self.update_progress_bar.color = COLORS["success"]
             self.page.update()
 
-            # Wait and restart (5 seconds as requested)
+            # Đợi 5 giây để người dùng đọc thông báo (Vẫn cho phép UI phản hồi)
             import time
-            time.sleep(5)
+            for i in range(5, 0, -1):
+                self.update_progress_text.value = f"Restarting in {i}s..."
+                self.page.update()
+                time.sleep(1)
+            
+            # Lệnh Restart dứt khoát
             restart_application()
 
             self.version_text.value = f"v{update_info['version']} (restart needed)"
