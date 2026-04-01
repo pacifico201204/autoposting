@@ -1,4 +1,4 @@
-# 🚀 AutoPostingTool (Vibecode Release)
+# 🚀 AutoPostingTool
 
 **AutoPostingTool** là giải pháp tự động hóa đăng bài mạng xã hội mạnh mẽ, được thiết kế với sự chú trọng đặc biệt vào khả năng vượt qua các hệ thống phát hiện bot (Stealth) và trải nghiệm người dùng hiện đại.
 
