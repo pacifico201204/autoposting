@@ -383,7 +383,7 @@ def on_check_update(app_instance, e):
                             time.sleep(1)
 
                         from utils import restart_application
-                        restart_application()
+                        restart_application(app_instance.page)
                     else:
                         app_instance.log_msg(
                             f"❌ Extraction failed: {extract_msg}",

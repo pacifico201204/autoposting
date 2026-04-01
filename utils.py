@@ -61,27 +61,39 @@ def get_writable_path(filename):
         return os.path.join(get_app_dir(), filename)
 
 
-def restart_application():
-    """Restart the application.
-    
-    When frozen: restarts the EXE using os.startfile for detached process.
-    When in development: restarts the script.
-    """
+def restart_application(page=None):
+    """Restart the application with Detached Process and immediate exit."""
     try:
         if getattr(sys, 'frozen', False):
             # EXE mode
             executable = sys.executable
-            # os.startfile is built-in to Windows to open a file with its associated app (or execute an EXE)
-            # It starts the process and doesn't wait, which is perfect for self-restart.
-            os.startfile(executable)
+            # Mở app mới ở chế độ độc lập (detached)
+            subprocess.Popen(
+                [executable],
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=True
+            )
         else:
             # Python script mode
             executable = sys.executable
             script = sys.argv[0]
-            # Use subprocess for development mode restart
-            subprocess.Popen([executable, script])
+            flags = 0
+            if sys.platform == "win32":
+                flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            subprocess.Popen(
+                [executable, script],
+                creationflags=flags,
+                close_fds=True
+            )
             
-        # Exit the current process IMMEDIATELY
+        # Tắt nóng giao diện Flet cũ
+        if page:
+            try:
+                page.window.destroy()
+            except Exception:
+                pass
+                
+        # Ép tiến trình Python cũ "tự sát" ngay lập tức
         os._exit(0) 
     except Exception as e:
         print(f"Failed to restart: {e}")

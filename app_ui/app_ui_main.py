@@ -1698,8 +1698,7 @@ class AppUI:
 
     def check_for_updates_async(self):
         """Check for updates in background (non-blocking)"""
-        threading.Thread(target=self._check_updates_thread,
-                         daemon=True).start()
+        self.page.run_task(self._check_updates_thread)
 
     def _check_updates_thread(self):
         """Background thread to check for updates"""
@@ -1754,10 +1753,7 @@ class AppUI:
         snack.open = True
         self.page.update()
 
-        threading.Thread(
-            target=self._perform_update_check,
-            daemon=True
-        ).start()
+        self.page.run_task(self._perform_update_check)
 
     def _perform_update_check(self):
         """Perform update check in background"""
@@ -1800,13 +1796,8 @@ class AppUI:
             self.update_dialog.open = False
             self.page.update()
 
-            # Perform update in background (Fixed pattern: threading call outside UI block if needed)
-            import threading
-            threading.Thread(
-                target=self._do_update,
-                args=(update_info,),
-                daemon=True
-            ).start()
+            # Perform update in background via Flet's managed run_task
+            self.page.run_task(self._do_update, update_info)
 
         # Update the pre-allocated dialog content
         self.update_dialog.title = ft.Text(
@@ -1944,7 +1935,7 @@ class AppUI:
                 time.sleep(1)
             
             # Lệnh Restart dứt khoát
-            restart_application()
+            restart_application(self.page)
 
             self.version_text.value = f"v{update_info['version']} (restart needed)"
             self.update_status_text.value = "Update complete - restart needed"
